@@ -1,0 +1,58 @@
+:root {
+  --text: #8ea8c7;
+  --text-strong: #ecf6ff;
+  --muted: #5f7da0;
+  --bg: #07111e;
+  --paper: #081320;
+  --panel: #0d1a2c;
+  --panel-2: #10233a;
+  --card: #0f2035;
+  --control: #10253d;
+  --input: #091827;
+  --border: #1c3652;
+  --accent: #80d8ff;
+  --accent-2: #a79bea;
+  --success: #3fe08f;
+  --warning: #f6c744;
+  --danger: #ef8080;
+  --sans: Inter, 'Segoe UI', 'Microsoft YaHei UI', Arial, sans-serif;
+  --serif: 'Noto Serif SC', 'Songti SC', Georgia, serif;
+  font: 14px/1.45 var(--sans);
+  letter-spacing: 0;
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}

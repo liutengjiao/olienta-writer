@@ -33,7 +33,7 @@ export const templates = [
 export const defaultTasks: TaskItem[] = [
   { id: 'shell', label: '应用骨架已创建', status: 'done' },
   { id: 'project', label: '本地项目模型已接入', status: 'ready' },
-  { id: 'ai', label: 'AI 候选稿已接入兼容接口', status: 'ready' },
+  { id: 'ai', label: 'AI 候选稿接口已接入', status: 'ready' },
 ]
 
 export const isTauriRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window

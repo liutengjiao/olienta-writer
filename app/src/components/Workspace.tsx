@@ -118,30 +118,30 @@ type Props = {
 }
 
 const MODULE_TITLES: Record<string, string> = {
-  home: 'Home',
-  'project-structure': 'Project Structure',
-  knowledge: 'Knowledge Base',
-  characters: 'Characters',
-  tasks: 'Tasks',
-  logs: 'Logs',
-  'model-calls': 'Model Calls',
+  home: '首页',
+  'project-structure': '项目结构',
+  knowledge: '知识库',
+  characters: '角色',
+  tasks: '任务',
+  logs: '日志',
+  'model-calls': '模型调用',
 }
 
 const VIEW_TITLES: Record<string, string> = {
-  'novel-settings': 'Novel Settings',
-  'story-premise': 'Story Premise',
-  characters: 'Character Map',
-  world: 'Worldbuilding',
-  'plot-outline': 'Plot Outline',
-  timeline: 'Timeline and Milestones',
-  'chapter-blueprint': 'Chapter Blueprint',
-  'draft-box': 'Draft Box',
-  manuscript: 'Manuscript',
-  facts: 'Fact Base',
+  'novel-settings': '小说设置',
+  'story-premise': '故事前提',
+  characters: '角色图谱',
+  world: '世界观',
+  'plot-outline': '情节大纲',
+  timeline: '时间线及里程碑',
+  'chapter-blueprint': '章节蓝图',
+  'draft-box': '草稿箱',
+  manuscript: '正文',
+  facts: '事实库',
   skills: 'Skills',
-  'ai-providers': 'AI Providers',
-  exports: 'Export',
-  'local-files': 'Local Markdown Files',
+  'ai-providers': 'AI Provider',
+  exports: '导出',
+  'local-files': '本地 Markdown',
 }
 
 const FRAMEWORK_PATHS: Record<string, string> = {
@@ -158,7 +158,7 @@ export function Workspace(props: Props) {
   const title = VIEW_TITLES[props.activeView] ?? MODULE_TITLES[props.activeModule] ?? 'Olienta'
   const subtitle = props.project
     ? props.project.root_path
-    : 'Local-first novel writing workspace. Open or create a project to edit Markdown files directly.'
+    : '本地优先写作工作台。打开或创建项目后，直接编辑本地 Markdown 文件。'
 
   return (
     <section className="workspace" aria-label="Olienta workspace">
@@ -200,7 +200,7 @@ function PageFrame(props: { title: string; subtitle?: string; children: React.Re
           <h1>{props.title}</h1>
           {props.subtitle && <p>{props.subtitle}</p>}
         </div>
-        <button type="button" className="ghost-button assistant-page-button" onClick={openAgent}>Call Assistant</button>
+        <button type="button" className="ghost-button assistant-page-button" onClick={openAgent}>打开助手</button>
       </div>
       {props.children}
     </section>
@@ -210,18 +210,18 @@ function PageFrame(props: { title: string; subtitle?: string; children: React.Re
 function HomePanel(props: Props) {
   return (
     <section className="editor-card">
-      <div className="card-heading"><h2>Project Entry</h2></div>
+      <div className="card-heading"><h2>项目入口</h2></div>
       <div className="settings-grid">
-        <label>Project name<input value={props.form.name} onChange={(event) => props.onUpdateForm('name', event.target.value)} /></label>
-        <label>Folder<input value={props.form.root_path} onChange={(event) => props.onUpdateForm('root_path', event.target.value)} /></label>
-        <label>Language<input value={props.form.language} onChange={(event) => props.onUpdateForm('language', event.target.value)} /></label>
-        <label>Chapters<input type="number" value={props.form.chapter_count} onChange={(event) => props.onUpdateForm('chapter_count', Number(event.target.value))} /></label>
+        <label>项目名称<input value={props.form.name} onChange={(event) => props.onUpdateForm('name', event.target.value)} /></label>
+        <label>项目文件夹<input value={props.form.root_path} onChange={(event) => props.onUpdateForm('root_path', event.target.value)} /></label>
+        <label>语言<input value={props.form.language} onChange={(event) => props.onUpdateForm('language', event.target.value)} /></label>
+        <label>章节数<input type="number" value={props.form.chapter_count} onChange={(event) => props.onUpdateForm('chapter_count', Number(event.target.value))} /></label>
       </div>
       <div className="editor-actions">
-        <button className="ghost-button" onClick={props.onChooseFolder}>Choose folder</button>
-        <button className="ghost-button" onClick={props.onOpenProject}>Open project</button>
-        <button className="ghost-button" onClick={props.onOpenSampleProject}>Open sample</button>
-        <button className="primary-button" onClick={props.onCreateProject} disabled={props.busy}>Create project</button>
+        <button className="ghost-button" onClick={props.onChooseFolder}>选择文件夹</button>
+        <button className="ghost-button" onClick={props.onOpenProject}>打开项目</button>
+        <button className="ghost-button" onClick={props.onOpenSampleProject}>打开样例</button>
+        <button className="primary-button" onClick={props.onCreateProject} disabled={props.busy}>创建项目</button>
       </div>
     </section>
   )
@@ -230,7 +230,7 @@ function HomePanel(props: Props) {
 function NovelSettingsPanel(props: Props) {
   return (
     <section className="editor-card">
-      <div className="card-heading"><h2>Novel Settings</h2></div>
+      <div className="card-heading"><h2>小说设置</h2></div>
       <HomePanel {...props} />
     </section>
   )
@@ -238,14 +238,14 @@ function NovelSettingsPanel(props: Props) {
 
 function FrameworkPanel(props: Props) {
   const path = FRAMEWORK_PATHS[props.activeView] ?? props.frameworkPath
-  return <MarkdownDocument title={VIEW_TITLES[props.activeView] ?? 'Framework'} path={path} value={props.frameworkContent || props.markdownPreview} onChange={props.onChangeMarkdownPreview} onSave={() => props.onSaveModuleMarkdownFile(path, props.markdownPreview || props.frameworkContent)} />
+  return <MarkdownDocument title={VIEW_TITLES[props.activeView] ?? '框架文件'} path={path} value={props.frameworkContent || props.markdownPreview} onChange={props.onChangeMarkdownPreview} onSave={() => props.onSaveModuleMarkdownFile(path, props.markdownPreview || props.frameworkContent)} />
 }
 
 function BlueprintPanel(props: Props) {
   return (
     <section className="split-editor-layout">
       <ChapterList {...props} />
-      <MarkdownDocument title="Chapter Blueprint" path={props.blueprintPath} value={props.blueprint} onChange={props.onChangeBlueprint} onSave={props.onSaveBlueprint} actions={<><button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>Generate draft</button><button className="ghost-button" onClick={props.onComposeBrief}>Assemble brief</button></>} />
+      <MarkdownDocument title="章节蓝图" path={props.blueprintPath} value={props.blueprint} onChange={props.onChangeBlueprint} onSave={props.onSaveBlueprint} actions={<><button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成草案</button><button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button></>} />
     </section>
   )
 }
@@ -262,40 +262,40 @@ function DraftPanel(props: Props) {
         <section className="chapter-chain">
           <div className="chapter-chain-heading">
             <div>
-              <h2>Candidate Review Flow</h2>
-              <p>AI output stays in the candidate draft until the author explicitly adopts it.</p>
+              <h2>候选稿审查流程</h2>
+              <p>AI 输出只停留在候选稿中，必须由作者明确采用后才进入正文。</p>
             </div>
             <span>{props.currentChapter.title}</span>
           </div>
           <div className="chapter-chain-steps">
             <article className="chapter-chain-step confirmed">
-              <div><strong>Brief</strong><span>{props.writingBriefPath}</span></div>
-              <p>Assembled from blueprint, author input, facts, skills and pinned materials.</p>
+              <div><strong>任务书</strong><span>{props.writingBriefPath}</span></div>
+              <p>由蓝图、作者输入、事实库、Skill 和钉选材料装配而成。</p>
             </article>
             <article className="chapter-chain-step active">
-              <div><strong>Candidate</strong><span>{props.candidatePath}</span></div>
-              <p>Edit, review and save the candidate before it can affect confirmed manuscript.</p>
+              <div><strong>候选稿</strong><span>{props.candidatePath}</span></div>
+              <p>候选稿可编辑、审查和保存，但不会自动影响已确认正文。</p>
             </article>
             <article className="chapter-chain-step draft">
-              <div><strong>Manuscript</strong><span>{props.selectedChapterId}</span></div>
-              <p>Only replace or append writes candidate text into the confirmed chapter.</p>
+              <div><strong>正文</strong><span>{props.selectedChapterId}</span></div>
+              <p>只有替换或追加才会把候选稿写入已确认章节。</p>
             </article>
           </div>
         </section>
 
         <MarkdownDocument
-          title="Candidate Draft"
+          title="候选稿"
           path={props.candidatePath}
           value={props.candidate}
           onChange={props.onChangeCandidate}
           onSave={props.onSaveCandidate}
           actions={
             <>
-              <button className="ghost-button" onClick={props.onComposeBrief}>Assemble brief</button>
-              <button className="ghost-button" onClick={props.onGenerateCandidate}>Generate</button>
-              <button className="ghost-button" onClick={props.onClearCandidate}>Clear</button>
-              <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')}>Append</button>
-              <button className="primary-button" onClick={() => props.onAdoptCandidate('replace')}>Replace</button>
+              <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
+              <button className="ghost-button" onClick={props.onGenerateCandidate}>生成</button>
+              <button className="ghost-button" onClick={props.onClearCandidate}>清空</button>
+              <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')}>追加</button>
+              <button className="primary-button" onClick={() => props.onAdoptCandidate('replace')}>替换</button>
             </>
           }
         />
@@ -303,22 +303,22 @@ function DraftPanel(props: Props) {
         <section className="draft-diff-card">
           <div className="card-heading">
             <div>
-              <h2>Candidate vs Manuscript</h2>
-              <p>Lightweight review stats before adoption.</p>
+              <h2>候选稿与正文对比</h2>
+              <p>采用前的轻量审查统计。</p>
             </div>
             <span className="status-pill">{props.candidateReviewPath}</span>
           </div>
           <div className="health-strip">
-            <article><span>Candidate units</span><strong>{candidateUnits}</strong></article>
-            <article><span>Manuscript units</span><strong>{manuscriptUnits}</strong></article>
-            <article><span>Paragraph delta</span><strong>{candidateParagraphs - manuscriptParagraphs}</strong></article>
+            <article><span>候选稿单位数</span><strong>{candidateUnits}</strong></article>
+            <article><span>正文单位数</span><strong>{manuscriptUnits}</strong></article>
+            <article><span>段落差值</span><strong>{candidateParagraphs - manuscriptParagraphs}</strong></article>
           </div>
         </section>
 
         {props.candidateWarnings.length > 0 && (
           <section className="warning-list">
             <div className="card-heading">
-              <h2>Review Warnings</h2>
+              <h2>审查提醒</h2>
               <span>{props.candidateWarnings.length}</span>
             </div>
             <ul>
@@ -330,11 +330,11 @@ function DraftPanel(props: Props) {
 
       <aside className="blueprint-history">
         <div className="panel-heading">
-          <h2>History</h2>
+          <h2>历史版本</h2>
           <span>{props.candidateHistory.length}</span>
         </div>
         <div className="compact-list">
-          {props.candidateHistory.length === 0 && <p className="empty-note">No saved candidate history yet.</p>}
+          {props.candidateHistory.length === 0 && <p className="empty-note">还没有保存过候选稿历史。</p>}
           {props.candidateHistory.map((item) => (
             <button
               type="button"
@@ -351,7 +351,7 @@ function DraftPanel(props: Props) {
         <textarea
           className="history-preview"
           readOnly
-          value={props.candidateHistoryPreview || 'Select a saved candidate version to preview it.'}
+          value={props.candidateHistoryPreview || '选择一个已保存的候选稿版本进行预览。'}
         />
         <button
           type="button"
@@ -359,7 +359,7 @@ function DraftPanel(props: Props) {
           disabled={!props.selectedCandidateHistoryPath}
           onClick={props.onRestoreCandidateHistory}
         >
-          Restore to editor
+          恢复到编辑器
         </button>
       </aside>
     </section>
@@ -376,39 +376,39 @@ function ManuscriptPanel(props: Props) {
         <section className="chapter-chain">
           <div className="chapter-chain-heading">
             <div>
-              <h2>Confirmed Manuscript</h2>
-              <p>Saving this chapter records author confirmation and refreshes downstream memory.</p>
+              <h2>已确认正文</h2>
+              <p>保存本章会记录作者确认，并刷新后续记忆链路。</p>
             </div>
             <span>{props.saveState}</span>
           </div>
           <div className="chapter-chain-steps">
             <article className="chapter-chain-step confirmed">
-              <div><strong>Chapter file</strong><span>{props.chapterPath}</span></div>
-              <p>Plain Markdown remains the source of truth for confirmed manuscript text.</p>
+              <div><strong>章节文件</strong><span>{props.chapterPath}</span></div>
+              <p>普通 Markdown 文件仍是已确认正文的真实来源。</p>
             </article>
             <article className="chapter-chain-step draft">
-              <div><strong>Candidate available</strong><span>{candidateUnits}</span></div>
-              <p>Candidate text can be appended or replaced from the Draft Box, never silently adopted.</p>
+              <div><strong>候选稿可用</strong><span>{candidateUnits}</span></div>
+              <p>候选稿只能从草稿箱追加或替换，不会静默进入正文。</p>
             </article>
             <article className="chapter-chain-step active">
-              <div><strong>Facts</strong><span>{props.confirmedFactsPath}</span></div>
-              <p>Use rescan after major edits to refresh confirmed facts from saved chapters.</p>
+              <div><strong>事实库</strong><span>{props.confirmedFactsPath}</span></div>
+              <p>大幅编辑后可重扫事实库，从已保存正文刷新确认事实。</p>
             </article>
           </div>
         </section>
 
         <MarkdownDocument
-          title="Manuscript"
+          title="正文"
           path={props.chapterPath}
           value={props.manuscript}
           onChange={props.onChangeManuscript}
           onSave={props.onSaveChapter}
           actions={
             <>
-              <button type="button" className="ghost-button" onClick={props.onToggleFocusMode}>Focus</button>
-              <button type="button" className="ghost-button" onClick={props.onRescanFacts}>Rescan facts</button>
-              <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>Export MD</button>
-              <button type="button" className="ghost-button" onClick={() => props.onExportProject('txt', 'chapter')}>Export TXT</button>
+              <button type="button" className="ghost-button" onClick={props.onToggleFocusMode}>纯写作</button>
+              <button type="button" className="ghost-button" onClick={props.onRescanFacts}>重扫事实</button>
+              <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>导出 MD</button>
+              <button type="button" className="ghost-button" onClick={() => props.onExportProject('txt', 'chapter')}>导出 TXT</button>
             </>
           }
         />
@@ -417,7 +417,7 @@ function ManuscriptPanel(props: Props) {
       <aside className="confirmation-side">
         <section className="review-card">
           <div className="panel-heading">
-            <h2>Chapter State</h2>
+            <h2>章节状态</h2>
             <span>{props.currentChapter.state ?? 'draft'}</span>
           </div>
           <div className="health-strip">
@@ -429,13 +429,13 @@ function ManuscriptPanel(props: Props) {
 
         <section className="review-card">
           <div className="panel-heading">
-            <h2>Author Confirmation</h2>
-            <span>Local log</span>
+            <h2>作者确认</h2>
+            <span>本地日志</span>
           </div>
-          <p className="empty-note">Save writes confirmation metadata and commit-style events without moving AI text unless you explicitly adopt a candidate.</p>
+          <p className="empty-note">保存会写入确认摘要和事件记录；除非明确采用候选稿，否则 AI 文本不会进入正文。</p>
           <div className="editor-actions">
-            <button type="button" className="primary-button" onClick={props.onSaveChapter}>Save confirmed text</button>
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('facts/author-confirmation.md')}>Open log</button>
+            <button type="button" className="primary-button" onClick={props.onSaveChapter}>保存已确认正文</button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('facts/author-confirmation.md')}>打开日志</button>
           </div>
         </section>
 
@@ -444,17 +444,17 @@ function ManuscriptPanel(props: Props) {
             <h2>Memory</h2>
             <span>{props.openLoopsPath}</span>
           </div>
-          <p className="empty-note">Facts and open loops are stored as normal Markdown files, so the author can inspect and edit them directly.</p>
+          <p className="empty-note">事实和伏笔都存为普通 Markdown 文件，作者可以直接查看和编辑。</p>
           <div className="editor-actions">
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.confirmedFactsPath)}>Facts</button>
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.openLoopsPath)}>Open loops</button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.confirmedFactsPath)}>事实库</button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.openLoopsPath)}>伏笔</button>
           </div>
         </section>
 
         <section className="review-card">
           <div className="panel-heading">
-            <h2>Export Current Chapter</h2>
-            <span>{props.lastExportedPath || 'Not exported'}</span>
+            <h2>导出当前章</h2>
+            <span>{props.lastExportedPath || '尚未导出'}</span>
           </div>
           <div className="editor-actions">
             <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>MD</button>
@@ -482,32 +482,32 @@ function KnowledgePanel(props: Props) {
     <section className="knowledge-overview-panel">
       <div className="knowledge-summary-grid">
         <article>
-          <span>Project health</span>
+          <span>项目健康</span>
           <strong>{healthStatus}</strong>
-          <p>{props.projectHealth ? `${props.projectHealth.missing_count} missing, ${props.projectHealth.warning_count} warnings` : 'Open a project to inspect local structure.'}</p>
+          <p>{props.projectHealth ? `缺失 ${props.projectHealth.missing_count} 项，警告 ${props.projectHealth.warning_count} 项` : '打开项目后检查本地结构。'}</p>
         </article>
         <article>
-          <span>Markdown files</span>
+          <span>Markdown 文件</span>
           <strong>{markdownCount}</strong>
-          <p>Local project files that can be inspected without a database.</p>
+          <p>无需数据库即可检查的本地项目文件。</p>
         </article>
         <article>
-          <span>Knowledge files</span>
+          <span>知识库文件</span>
           <strong>{referenceCount}</strong>
-          <p>Imported notes, indexes, search docs and fact files.</p>
+          <p>导入资料、索引、检索文档和事实文件。</p>
         </article>
       </div>
 
       <div className="knowledge-import-actions editor-card">
         <div>
-          <h2>Local Knowledge Intake</h2>
-          <p className="empty-note">Import Markdown/TXT references into the project folder, then pin useful excerpts into chapter briefs.</p>
+          <h2>本地资料导入</h2>
+          <p className="empty-note">把 Markdown/TXT 资料导入项目文件夹，再把有用片段钉选进章节任务书。</p>
         </div>
         <div className="editor-actions">
-          <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>Import file</button>
-          <button type="button" className="ghost-button" onClick={props.onImportReferenceFolder}>Import folder</button>
-          <button type="button" className="ghost-button" onClick={props.onRevealProjectFolder}>Open folder</button>
-          <button type="button" className="primary-button" onClick={props.onRepairProjectStructure}>Repair structure</button>
+          <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>导入文件</button>
+          <button type="button" className="ghost-button" onClick={props.onImportReferenceFolder}>导入文件夹</button>
+          <button type="button" className="ghost-button" onClick={props.onRevealProjectFolder}>打开文件夹</button>
+          <button type="button" className="primary-button" onClick={props.onRepairProjectStructure}>修复结构</button>
         </div>
       </div>
 
@@ -524,15 +524,15 @@ function KnowledgeFactsPanel(props: Props) {
   return (
     <section className="module-document-layout">
       <MarkdownDocument
-        title="Confirmed Facts"
+        title="已确认事实"
         path={props.confirmedFactsPath}
         value={props.confirmedFacts}
         onChange={props.onChangeConfirmedFacts}
         onSave={() => props.onSaveKnowledgeFile('confirmed-facts')}
-        actions={<button type="button" className="ghost-button" onClick={props.onRescanFacts}>Rescan manuscript</button>}
+        actions={<button type="button" className="ghost-button" onClick={props.onRescanFacts}>重扫正文</button>}
       />
       <MarkdownDocument
-        title="Open Loops"
+        title="未闭合伏笔"
         path={props.openLoopsPath}
         value={props.openLoops}
         onChange={props.onChangeOpenLoops}
@@ -543,11 +543,11 @@ function KnowledgeFactsPanel(props: Props) {
 }
 
 const SEARCH_SCOPES = [
-  { key: 'all', title: 'All', detail: 'Every readable project text file' },
-  { key: 'imported', title: 'Imported', detail: 'knowledge/markdown/imported' },
-  { key: 'framework', title: 'Framework', detail: 'setting, premise, plot, world' },
-  { key: 'manuscript', title: 'Manuscript', detail: 'chapters, blueprints, candidates' },
-  { key: 'memory', title: 'Memory', detail: 'facts, tasks, logs' },
+  { key: 'all', title: '全部', detail: '所有可读项目文本' },
+  { key: 'imported', title: '导入资料', detail: 'knowledge/markdown/imported' },
+  { key: 'framework', title: '框架', detail: '设定、前提、情节、世界观' },
+  { key: 'manuscript', title: '正文链路', detail: '正文、蓝图、候选稿' },
+  { key: 'memory', title: '记忆', detail: '事实、任务、日志' },
 ]
 
 function KnowledgeSearchPanel(props: Props) {
@@ -556,12 +556,12 @@ function KnowledgeSearchPanel(props: Props) {
   const [results, setResults] = useState<ProjectSearchResult[]>([])
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [pinnedContext, setPinnedContext] = useState<PinnedContextItem[]>([])
-  const [status, setStatus] = useState('Ready')
+  const [status, setStatus] = useState('就绪')
 
   async function runSearch() {
     const trimmed = query.trim()
     if (!trimmed) {
-      setStatus('Enter a search query.')
+      setStatus('请输入检索关键词。')
       setResults([])
       setSelectedKeys([])
       return
@@ -575,32 +575,32 @@ function KnowledgeSearchPanel(props: Props) {
           category: file.category,
           relative_path: file.relative_path,
           line_number: index + 1,
-          snippet: `Preview match for "${trimmed}" in ${file.relative_path}`,
+          snippet: `预览匹配：“${trimmed}” 出现在 ${file.relative_path}`,
         }))
       setResults(previewResults)
       setSelectedKeys([])
-      setStatus(`${previewResults.length} preview matches`)
+      setStatus(`预览匹配 ${previewResults.length} 条`)
       return
     }
 
-    setStatus('Searching...')
+    setStatus('检索中...')
     try {
       const found = isTauriRuntime
         ? await tauriApi.searchProjectTextFilesScoped(props.project.root_path, trimmed, scope)
         : []
       setResults(found)
       setSelectedKeys([])
-      setStatus(`${found.length} matches`)
+      setStatus(`匹配 ${found.length} 条`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
 
   async function refreshPinnedContext() {
-    setStatus('Loading pinned context...')
+    setStatus('正在读取钉选材料...')
     const pinned = await props.onListPinnedContext()
     setPinnedContext(pinned)
-    setStatus(`${pinned.length} pinned items`)
+    setStatus(`已钉选 ${pinned.length} 条`)
   }
 
   function toggleResult(result: ProjectSearchResult) {
@@ -616,8 +616,8 @@ function KnowledgeSearchPanel(props: Props) {
     <section className="editor-card">
       <div className="card-heading">
         <div>
-          <h2>Local Full Text Search</h2>
-          <p>Search local project files and pin useful evidence into the current chapter brief.</p>
+          <h2>本地全文检索</h2>
+          <p>检索本地项目文件，并把有用材料钉选进当前章节任务书。</p>
         </div>
         <span className="status-pill">{status}</span>
       </div>
@@ -629,10 +629,10 @@ function KnowledgeSearchPanel(props: Props) {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void runSearch()
           }}
-          placeholder="Search project text files"
+          placeholder="检索项目文本文件"
         />
-        <button type="button" className="primary-button" onClick={() => void runSearch()}>Search</button>
-        <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>Pinned</button>
+        <button type="button" className="primary-button" onClick={() => void runSearch()}>检索</button>
+        <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>钉选材料</button>
       </div>
 
       <div className="search-scope-grid">
@@ -660,7 +660,7 @@ function KnowledgeSearchPanel(props: Props) {
                   setSelectedKeys(event.target.checked ? results.map(searchResultKey) : [])
                 }
               />
-              <span>{selectedKeys.length} selected</span>
+              <span>已选择 {selectedKeys.length} 条</span>
             </label>
             <button
               type="button"
@@ -668,7 +668,7 @@ function KnowledgeSearchPanel(props: Props) {
               disabled={selectedResults.length === 0}
               onClick={() => props.onPinSearchResultsToBrief(selectedResults)}
             >
-              Pin selected
+              批量钉选
             </button>
           </div>
         )}
@@ -685,13 +685,13 @@ function KnowledgeSearchPanel(props: Props) {
             <strong>{result.snippet}</strong>
             <div className="search-result-actions">
               <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(result.relative_path)}>
-                Open
+                打开
               </button>
               <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(result.relative_path)}>
-                Locate
+                定位
               </button>
               <button type="button" className="primary-button" onClick={() => props.onPinSearchResultToBrief(result)}>
-                Pin
+                钉选
               </button>
             </div>
           </article>
@@ -701,8 +701,8 @@ function KnowledgeSearchPanel(props: Props) {
       {pinnedContext.length > 0 && (
         <section className="pinned-context-panel">
           <div className="panel-heading">
-            <h2>Pinned Context</h2>
-            <span>{pinnedContext.length} items for chapter {props.selectedChapterId}</span>
+            <h2>已钉选材料</h2>
+            <span>第 {props.selectedChapterId} 章，共 {pinnedContext.length} 条</span>
           </div>
           <div className="pinned-context-list">
             {pinnedContext.map((item) => (
@@ -717,7 +717,7 @@ function KnowledgeSearchPanel(props: Props) {
                       void props.onRemovePinnedContextItem(item.index).then(refreshPinnedContext)
                     }}
                   >
-                    Remove
+                    移除
                   </button>
                 </div>
               </article>
@@ -740,18 +740,18 @@ function ProjectHealthPanel(props: Props) {
     <section className={`project-health-panel ${report?.ready ? 'ready' : report ? 'warning' : 'missing'}`}>
       <div className="panel-heading">
         <div>
-          <h2>Project Structure Health</h2>
-          <p className="empty-note">{report ? 'Required local files and folders for the current writing project.' : 'Open a project to inspect its local file structure.'}</p>
+          <h2>项目结构健康</h2>
+          <p className="empty-note">{report ? '当前写作项目所需的本地文件和文件夹。' : '打开项目后检查本地文件结构。'}</p>
         </div>
         <div className="health-side-actions">
-          <button type="button" className="ghost-button" onClick={props.onRevealProjectFolder}>Open folder</button>
-          <button type="button" className="primary-button" onClick={props.onRepairProjectStructure}>Repair</button>
+          <button type="button" className="ghost-button" onClick={props.onRevealProjectFolder}>打开文件夹</button>
+          <button type="button" className="primary-button" onClick={props.onRepairProjectStructure}>修复</button>
         </div>
       </div>
       <div className="health-strip">
-        <article><span>Status</span><strong>{report?.status ?? 'No project'}</strong></article>
-        <article><span>Missing</span><strong>{report?.missing_count ?? 0}</strong></article>
-        <article><span>Warnings</span><strong>{report?.warning_count ?? 0}</strong></article>
+        <article><span>状态</span><strong>{report?.status ?? '未打开项目'}</strong></article>
+        <article><span>缺失</span><strong>{report?.missing_count ?? 0}</strong></article>
+        <article><span>警告</span><strong>{report?.warning_count ?? 0}</strong></article>
       </div>
       <div className="health-missing-list">
         {checks.slice(0, 10).map((check) => (
@@ -780,17 +780,17 @@ const CHARACTER_DOCUMENTS: Record<string, { title: string; path: string; note: s
   'characters-cards': {
     title: 'Character Cards',
     path: 'characters/cards/INDEX.md',
-    note: 'Generated index and individual cards stored under characters/cards.',
+    note: '生成索引和独立角色卡，保存在 characters/cards 下。',
   },
   'characters-relations': {
     title: 'Relationship Map',
     path: 'characters/relations.md',
-    note: 'Relationship, desire, interest and conflict notes extracted from character material.',
+    note: '从角色材料中整理关系、欲望、利益和冲突。',
   },
   'characters-growth': {
     title: 'Growth Line',
     path: 'characters/growth.md',
-    note: 'Character state changes and chapter-positioned growth notes.',
+    note: '记录角色状态变化和对应章节位置。',
   },
 }
 
@@ -825,11 +825,11 @@ function CharactersPanel(props: Props) {
           </div>
           <div>
             <dt>Relations</dt>
-            <dd>{hasMarkdownFile(props.markdownFiles, 'characters/relations.md') ? 'Ready' : 'Missing'}</dd>
+            <dd>{hasMarkdownFile(props.markdownFiles, 'characters/relations.md') ? '已就绪' : '缺失'}</dd>
           </div>
           <div>
             <dt>Growth</dt>
-            <dd>{hasMarkdownFile(props.markdownFiles, 'characters/growth.md') ? 'Ready' : 'Missing'}</dd>
+            <dd>{hasMarkdownFile(props.markdownFiles, 'characters/growth.md') ? '已就绪' : '缺失'}</dd>
           </div>
         </dl>
       </div>
@@ -837,7 +837,7 @@ function CharactersPanel(props: Props) {
       <section className="character-workspace-layout">
         <aside className="character-card-list">
           <button type="button" className="primary-button" onClick={props.onExtractCharacterCards}>
-            Extract cards
+            抽取角色卡
           </button>
           {Object.values(CHARACTER_DOCUMENTS).map((document) => (
             <button
@@ -906,8 +906,8 @@ function LocalFilesPanel(props: Props) {
     <section className="local-files-layout">
       <div className="local-files-list">
         <div className="editor-actions local-file-preview-actions">
-          <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>Import file</button>
-          <button type="button" className="ghost-button" onClick={props.onImportReferenceFolder}>Import folder</button>
+          <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>导入文件</button>
+          <button type="button" className="ghost-button" onClick={props.onImportReferenceFolder}>导入文件夹</button>
         </div>
         {groupMarkdownFiles(props.markdownFiles).map(([category, files]) => (
           <div className="local-file-group" key={category}>
@@ -919,7 +919,7 @@ function LocalFilesPanel(props: Props) {
                   <span>{formatBytes(file.bytes)}</span>
                 </button>
                 <button type="button" className="local-file-locate" onClick={() => props.onRevealProjectPath(file.relative_path)}>
-                  Locate
+                  定位
                 </button>
               </div>
             ))}
@@ -927,8 +927,8 @@ function LocalFilesPanel(props: Props) {
         ))}
       </div>
       <MarkdownDocument
-        title="Local Markdown"
-        path={props.selectedMarkdownPath || 'Select a file'}
+        title="本地 Markdown"
+        path={props.selectedMarkdownPath || '选择一个文件'}
         value={props.markdownPreview}
         onChange={props.onChangeMarkdownPreview}
         onSave={() => props.selectedMarkdownPath && props.onSaveModuleMarkdownFile(props.selectedMarkdownPath, props.markdownPreview)}
@@ -942,7 +942,7 @@ function SkillPanel(props: Props) {
     <section className="local-files-layout">
       <div className="local-files-list">
         <button type="button" className="primary-button full-button" onClick={props.onImportSkillFile}>
-          Import Skill
+          导入 Skill
         </button>
         {props.skillWarnings.length > 0 && (
           <ul className="skill-warning-list">
@@ -977,7 +977,7 @@ function SkillPanel(props: Props) {
         ))}
       </div>
       <MarkdownDocument
-        title="Selected Skill"
+        title="已选 Skill"
         path={props.selectedSkillName || 'skills/selected'}
         value={props.skillPreview}
         onChange={() => undefined}
@@ -989,15 +989,15 @@ function SkillPanel(props: Props) {
 
 function TasksPanel(props: Props) {
   const [pinnedContext, setPinnedContext] = useState<PinnedContextItem[]>([])
-  const [pinnedStatus, setPinnedStatus] = useState('Pinned context not loaded')
+  const [pinnedStatus, setPinnedStatus] = useState('尚未读取钉选材料')
   const currentPath = props.activeModuleView === 'tasks-history' ? 'tasks/history.jsonl' : 'tasks/current.json'
   const isHistory = props.activeModuleView === 'tasks-history'
 
   async function refreshPinnedContext() {
-    setPinnedStatus('Loading pinned context...')
+    setPinnedStatus('正在读取钉选材料...')
     const items = await props.onListPinnedContext()
     setPinnedContext(items)
-    setPinnedStatus(`${items.length} pinned items`)
+    setPinnedStatus(`已钉选 ${items.length} 条`)
   }
 
   if (isHistory) {
@@ -1005,7 +1005,7 @@ function TasksPanel(props: Props) {
       <section className="system-events-panel">
         <TaskStatusStrip tasks={props.tasks} />
         <MarkdownDocument
-          title="Task History"
+          title="任务历史"
           path={props.selectedMarkdownPath || currentPath}
           value={props.markdownPreview}
           onChange={props.onChangeMarkdownPreview}
@@ -1021,27 +1021,27 @@ function TasksPanel(props: Props) {
       <section className="split-editor-layout">
         <ChapterList {...props} />
         <MarkdownDocument
-          title="Chapter Writing Brief"
+          title="章节任务书"
           path={props.writingBriefPath}
           value={props.writingBrief}
           onChange={props.onChangeWritingBrief}
           onSave={() => props.onSaveModuleMarkdownFile(props.writingBriefPath, props.writingBrief)}
           actions={
             <>
-              <button type="button" className="ghost-button" onClick={props.onComposeBrief}>Assemble brief</button>
-              <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>Pinned</button>
-              <button type="button" className="primary-button" onClick={props.onGenerateCandidate}>Generate candidate</button>
+              <button type="button" className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
+              <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>钉选材料</button>
+              <button type="button" className="primary-button" onClick={props.onGenerateCandidate}>生成候选稿</button>
             </>
           }
         />
       </section>
       <section className="pinned-context-panel">
         <div className="panel-heading">
-          <h2>Pinned Materials</h2>
+          <h2>钉选材料</h2>
           <span>{pinnedStatus}</span>
         </div>
         {pinnedContext.length === 0 ? (
-          <p className="empty-note">Search local materials in Knowledge Base and pin selected results into this chapter brief.</p>
+          <p className="empty-note">在知识库中检索本地材料，并把选中的结果钉选进本章任务书。</p>
         ) : (
           <div className="pinned-context-list">
             {pinnedContext.map((item) => (
@@ -1050,7 +1050,7 @@ function TasksPanel(props: Props) {
                 <p>{item.snippet}</p>
                 <div className="search-result-actions">
                   <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(item.source_path)}>
-                    Open source
+                    打开来源
                   </button>
                   <button
                     type="button"
@@ -1059,7 +1059,7 @@ function TasksPanel(props: Props) {
                       void props.onRemovePinnedContextItem(item.index).then(refreshPinnedContext)
                     }}
                   >
-                    Remove
+                    移除
                   </button>
                 </div>
               </article>
@@ -1093,7 +1093,7 @@ function LogsPanel(props: Props) {
   )
   return (
     <DocumentHubPanel
-      title={props.activeModuleView === 'logs-system-events' ? 'System Events' : 'Author Confirmation Log'}
+      title={props.activeModuleView === 'logs-system-events' ? '系统事件' : '作者确认日志'}
       files={files}
       selectedPath={props.selectedMarkdownPath}
       content={props.markdownPreview}
@@ -1117,16 +1117,16 @@ function ModelCallsPanel(props: Props) {
   return (
     <section className="system-events-panel">
       <div className="provider-test-card">
-        <span>Provider test</span>
+        <span>Provider 测试</span>
         <strong>{props.providerTestMessage}</strong>
         <p>{props.aiProvidersPath}</p>
         <div className="editor-actions">
-          <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>Run test</button>
-          <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(defaultPath)}>Open history</button>
+          <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+          <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(defaultPath)}>打开历史</button>
         </div>
       </div>
       <MarkdownDocument
-        title={props.activeModuleView === 'model-tests' ? 'Connection Test Log' : 'Model Call Records'}
+        title={props.activeModuleView === 'model-tests' ? '连接测试记录' : '模型调用记录'}
         path={props.selectedMarkdownPath || defaultPath}
         value={props.markdownPreview}
         onChange={props.onChangeMarkdownPreview}
@@ -1146,11 +1146,11 @@ function DocumentHubPanel(props: {
   onSave: (relativePath: string, content: string) => void
   onReveal: (relativePath: string) => void
 }) {
-  const path = props.selectedPath || props.files[0]?.relative_path || 'Select a file'
+  const path = props.selectedPath || props.files[0]?.relative_path || '选择一个文件'
   return (
     <section className="module-document-layout">
       <div className="module-document-list">
-        {props.files.length === 0 && <p className="empty-note">No matching local files yet.</p>}
+        {props.files.length === 0 && <p className="empty-note">暂时没有匹配的本地文件。</p>}
         {props.files.map((file) => (
           <div className="local-file-row local-file-row-with-action" key={file.relative_path}>
             <button type="button" className="local-file-open" onClick={() => props.onLoad(file.relative_path)}>
@@ -1158,7 +1158,7 @@ function DocumentHubPanel(props: {
               <span>{file.category} · {formatBytes(file.bytes)}</span>
             </button>
             <button type="button" className="local-file-locate" onClick={() => props.onReveal(file.relative_path)}>
-              Locate
+              定位
             </button>
           </div>
         ))}
@@ -1185,39 +1185,39 @@ function groupMarkdownFiles(files: MarkdownFileSummary[]) {
 }
 
 function ProviderPanel(props: Props) {
-  return <MarkdownDocument title="AI Provider Config" path=".olienta/ai-providers.json" value={props.aiProvidersJson} onChange={props.onChangeAiProvidersJson} onSave={props.onSaveAiProviders} actions={<><button className="ghost-button" onClick={props.onTestAiProvider}>Test</button><span className="status-pill">{props.providerTestMessage}</span></>} />
+  return <MarkdownDocument title="AI Provider 配置" path=".olienta/ai-providers.json" value={props.aiProvidersJson} onChange={props.onChangeAiProvidersJson} onSave={props.onSaveAiProviders} actions={<><button className="ghost-button" onClick={props.onTestAiProvider}>测试</button><span className="status-pill">{props.providerTestMessage}</span></>} />
 }
 
 function ExportPanel(props: Props) {
   return (
     <section className="editor-card">
-      <div className="card-heading"><h2>Export</h2></div>
+      <div className="card-heading"><h2>导出</h2></div>
       <ExportPanelActions {...props} />
-      {props.lastExportedPath && <p className="empty-note">Last exported: {props.lastExportedPath}</p>}
+      {props.lastExportedPath && <p className="empty-note">最近导出：{props.lastExportedPath}</p>}
     </section>
   )
 }
 
 function ExportPanelActions(props: Props) {
-  return <div className="editor-actions"><button className="ghost-button" onClick={() => props.onExportProject('markdown', 'all')}>Export all MD</button><button className="ghost-button" onClick={() => props.onExportProject('txt', 'all')}>Export TXT</button><button className="ghost-button" onClick={() => props.onExportProject('docx', 'all')}>Export DOCX</button></div>
+  return <div className="editor-actions"><button className="ghost-button" onClick={() => props.onExportProject('markdown', 'all')}>导出全书 MD</button><button className="ghost-button" onClick={() => props.onExportProject('txt', 'all')}>导出 TXT</button><button className="ghost-button" onClick={() => props.onExportProject('docx', 'all')}>导出 DOCX</button></div>
 }
 
 function MarkdownDocument(props: { title: string; path: string; value: string; onChange: (value: string) => void; onSave: () => void; actions?: React.ReactNode }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
   return (
     <section className="editor-card module-document-panel">
-      <div className="card-heading"><div><h2>{props.title}</h2><p>{props.path}</p></div><div className="editor-actions"><button className="ghost-button" onClick={() => setMode(mode === 'edit' ? 'preview' : 'edit')}>{mode === 'edit' ? 'Preview' : 'Edit'}</button>{props.actions}<button className="primary-button" onClick={props.onSave}>Save</button></div></div>
-      {mode === 'edit' ? <textarea className="markdown-preview source" value={props.value} onChange={(event) => props.onChange(event.target.value)} /> : <pre className="markdown-rendered local-markdown-rendered">{props.value || 'No content.'}</pre>}
+      <div className="card-heading"><div><h2>{props.title}</h2><p>{props.path}</p></div><div className="editor-actions"><button className="ghost-button" onClick={() => setMode(mode === 'edit' ? 'preview' : 'edit')}>{mode === 'edit' ? '预览' : '编辑'}</button>{props.actions}<button className="primary-button" onClick={props.onSave}>保存</button></div></div>
+      {mode === 'edit' ? <textarea className="markdown-preview source" value={props.value} onChange={(event) => props.onChange(event.target.value)} /> : <pre className="markdown-rendered local-markdown-rendered">{props.value || '暂无内容。'}</pre>}
     </section>
   )
 }
 
 function ChapterList(props: Props) {
-  return <aside className="chapter-list-panel">{props.chapters.map((chapter) => <button className={`chapter-list-item ${chapter.id === props.selectedChapterId ? 'active' : ''}`} key={chapter.id} onClick={() => props.onSelectChapter(chapter.id)}><span>{chapter.id}</span><strong>{chapter.title}</strong><small>{chapter.word_count ?? 0} words</small></button>)}</aside>
+  return <aside className="chapter-list-panel">{props.chapters.map((chapter) => <button className={`chapter-list-item ${chapter.id === props.selectedChapterId ? 'active' : ''}`} key={chapter.id} onClick={() => props.onSelectChapter(chapter.id)}><span>{chapter.id}</span><strong>{chapter.title}</strong><small>{chapter.word_count ?? 0} 字</small></button>)}</aside>
 }
 
 function FocusMode(props: Props) {
-  return <section className="focus-mode"><div className="focus-topbar"><strong>{props.currentChapter.title}</strong><span>{props.saveState}</span><button onClick={props.onSaveChapter}>Save</button></div><textarea value={props.manuscript} onChange={(event) => props.onChangeManuscript(event.target.value)} /></section>
+  return <section className="focus-mode"><div className="focus-topbar"><strong>{props.currentChapter.title}</strong><span>{props.saveState}</span><button onClick={props.onSaveChapter}>保存</button></div><textarea value={props.manuscript} onChange={(event) => props.onChangeManuscript(event.target.value)} /></section>
 }
 
 function openAgent() {

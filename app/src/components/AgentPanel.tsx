@@ -97,13 +97,13 @@ export function AgentPanel(props: Props) {
         <div className="agent-header-actions">
           <span className="status-pill">{props.assistantState}</span>
           <button type="button" className="agent-close" onClick={props.onClose} aria-label="隐藏助手">
-            ×
+            X
           </button>
         </div>
       </header>
 
       <section className="agent-context-card">
-        <span>当前任务</span>
+        <span>当前目标</span>
         <strong>{context.target}</strong>
         <p>{context.path}</p>
       </section>
@@ -118,7 +118,7 @@ export function AgentPanel(props: Props) {
         <ul className="agent-check-list">
           {checks.map((item) => (
             <li key={`${item.label}-${item.path}`} className={item.ready ? 'ready' : 'muted'}>
-              <span>{item.ready ? '✓' : '○'}</span>
+              <span>{item.ready ? 'OK' : '-'}</span>
               <div>
                 <strong>{item.label}</strong>
                 <p>{item.path}</p>
@@ -130,7 +130,7 @@ export function AgentPanel(props: Props) {
       </section>
 
       <section className="agent-block">
-        <h3>本次生成会调用</h3>
+        <h3>本次生成会参考</h3>
         <ul className="agent-context-list">
           {context.contextItems.map((item) => (
             <li key={item}>{item}</li>
@@ -150,7 +150,7 @@ export function AgentPanel(props: Props) {
         {blueprintFocused && (
           <>
             <button type="button" className="primary" onClick={props.onGenerateBlueprintDraft}>生成本章蓝图</button>
-            <button type="button" onClick={props.onRegenerateAllBlueprints}>生成全部蓝图</button>
+            <button type="button" onClick={props.onRegenerateAllBlueprints}>重生成全部蓝图</button>
             <button type="button" onClick={props.onSaveBlueprint}>保存蓝图</button>
           </>
         )}
@@ -342,217 +342,192 @@ function buildContextChecks(props: Props, context: AgentContext, activeSkills: S
         label: '当前框架文件',
         path: props.frameworkPath,
         ready: has(props.frameworkContent),
-        note: '草案会写回这个编辑区，保存后才成为正式边界。',
+        note: '框架草案会先填入编辑器，保存后才成为作者确认版本。',
       },
       {
-        label: '已确认事实',
+        label: '事实库',
         path: props.confirmedFactsPath,
         ready: has(props.confirmedFacts),
-        note: '用于避免框架草案推翻作者已经确认的正文事实。',
+        note: '生成框架时会参考已确认事实，避免违背正文。',
       },
     )
   }
 
-  if (context.kind === 'blueprint' || context.kind === 'draft' || context.kind === 'chapter') {
+  if (context.kind === 'blueprint' || context.kind === 'chapter' || context.kind === 'draft') {
     checks.push(
-      {
-        label: '当前章节',
-        path: props.chapterPath,
-        ready: Boolean(props.selectedChapterId),
-        note: `当前绑定第 ${props.selectedChapterId} 章。`,
-      },
       {
         label: '章节蓝图',
         path: props.blueprintPath,
         ready: has(props.blueprint),
-        note: '候选稿必须优先服从本章蓝图。',
+        note: '候选稿生成必须服从当前章节蓝图。',
       },
       {
         label: '作者输入',
         path: props.authorInputPath,
         ready: has(props.authorInput),
-        note: '作者本章想法优先级最高，可短可长。',
+        note: '作者输入会作为当前章节的直接意图。',
       },
       {
         label: '写作任务书',
-        path: 'manuscript/briefs/当前章.md',
+        path: 'tasks/writing-briefs',
         ready: has(props.writingBrief),
-        note: '生成候选稿前建议先装配任务书。',
+        note: '任务书装配后会汇总蓝图、事实、Skill 和钉选材料。',
       },
     )
   }
 
-  if (context.kind === 'knowledge' || context.kind === 'draft' || context.kind === 'chapter' || context.kind === 'blueprint') {
+  if (context.kind === 'knowledge') {
     checks.push(
       {
-        label: '事实库',
+        label: '已确认事实',
         path: props.confirmedFactsPath,
         ready: has(props.confirmedFacts),
-        note: '正文保存后的事实会在这里约束后续生成。',
+        note: '正文保存后可重扫事实库。',
       },
       {
-        label: '伏笔库',
+        label: '未闭合伏笔',
         path: props.openLoopsPath,
         ready: has(props.openLoops),
-        note: '用于避免伏笔丢失或过早回收。',
+        note: '伏笔会进入后续任务书上下文。',
       },
     )
   }
 
   if (context.kind === 'provider') {
     checks.push({
-      label: 'Provider 配置',
+      label: 'Provider JSON',
       path: props.aiProvidersPath,
       ready: has(props.aiProvidersJson),
-      note: '只读取配置，不把 API Key 写入模型调用记录。',
+      note: props.providerTestMessage || '保存并测试后才建议用于真实生成。',
     })
   }
 
   checks.push({
-    label: 'Skill',
-    path: 'skills/',
+    label: '启用 Skill',
+    path: 'skills/selected',
     ready: activeSkills.length > 0,
-    note: activeSkills.length > 0 ? `${activeSkills.length} 个 Skill 会进入上下文。` : '暂无启用 Skill，生成会只依赖项目文件。',
+    note: activeSkills.length > 0 ? `${activeSkills.length} 个 Skill 会进入上下文` : '当前没有启用 Skill。',
   })
 
   return checks
 }
 
-function getAgentContext(activeModule: ModuleKey, activeModuleView: ModuleSubViewKey, activeView: ViewKey): AgentContext {
-  if (activeModule === 'project-structure') {
-    if (activeView === 'novel-settings') {
-      return {
-        kind: 'settings',
-        title: '配置助手',
-        target: '小说设置',
-        path: 'framework/01-setting.md',
-        description: '整理基础设定、全局写作要求、文风和 AI Provider。',
-        policy: '配置草案只进入编辑区，作者保存后才成为全局约束。',
-        contextItems: ['当前小说设置', '故事构架文件', '已确认事实', '已启用 Skill', 'AI Provider 配置'],
-      }
-    }
-    if (['story-premise', 'characters', 'world', 'plot-outline', 'timeline'].includes(activeView)) {
-      return {
-        kind: 'framework',
-        title: '故事构架助手',
-        target: getFrameworkTarget(activeView),
-        path: getFrameworkPath(activeView),
-        description: '整理故事边界文件，确保 AI 不脱离前提、角色、世界观和情节大纲。',
-        policy: '框架草案不会自动覆盖文件，保存后才成为后续 AI 必须遵守的边界。',
-        contextItems: ['当前框架文件', '其它故事构架文件', '事实库', '伏笔库', '已启用 Skill'],
-      }
-    }
-    if (activeView === 'chapter-blueprint') {
-      return {
-        kind: 'blueprint',
-        title: '蓝图助手',
-        target: '当前章节蓝图',
-        path: 'blueprints/chapters/当前章.md',
-        description: '生成或整理章节蓝图，让每一章只推进该章应该发生的内容。',
-        policy: '蓝图和正文分开。蓝图草案先进入编辑区，保存后才写入本地文件。',
-        contextItems: ['故事前提', '角色图谱', '世界观', '情节大纲', '时间轴及里程碑', '事实库', '前后章节蓝图', '已启用 Skill'],
-      }
-    }
-    if (activeView === 'draft-box') {
-      return {
-        kind: 'draft',
-        title: '候选稿助手',
-        target: '草稿箱 / 候选稿',
-        path: 'manuscript/candidates/当前章.md',
-        description: '生成候选稿和审查提醒，采用前不会进入正文。',
-        policy: '候选稿是 AI 工作区。只有作者点击采用并保存后，才进入正文确认链。',
-        contextItems: ['当前章节蓝图', '作者本章输入', '写作任务书', '事实库', '钉选材料', '已启用 Skill'],
-      }
-    }
-    if (activeView === 'manuscript') {
-      return {
-        kind: 'chapter',
-        title: '正文助手',
-        target: '当前正文章节',
-        path: 'manuscript/chapters/当前章.md',
-        description: '围绕当前章节装配任务书和生成候选稿，正文仍由作者最终确认。',
-        policy: '正文优先级最高。AI 只能生成候选，不直接替作者确认正文。',
-        contextItems: ['当前正文', '当前章节蓝图', '作者本章输入', '写作任务书', '事实库', '钉选材料', '已启用 Skill'],
-      }
+function getAgentContext(module: ModuleKey, moduleView: ModuleSubViewKey, view: ViewKey): AgentContext {
+  if (view === 'novel-settings') {
+    return {
+      kind: 'settings',
+      title: '小说设置助手',
+      target: '基础设定与全局要求',
+      path: 'framework/01-setting.md',
+      description: '围绕作品基础设定、语言、题材和全局写作要求工作。',
+      policy: '框架输出只进入编辑器，保存后才成为作者确认内容。',
+      contextItems: ['当前设定文件', '其它框架摘要', '事实库', '作者输入'],
     }
   }
 
-  if (activeModule === 'knowledge') {
+  if (['story-premise', 'characters', 'world', 'plot-outline', 'timeline'].includes(view)) {
+    return {
+      kind: 'framework',
+      title: '故事框架助手',
+      target: frameworkTarget(view),
+      path: 'framework/*.md',
+      description: '协助整理故事前提、角色、世界观、情节和时间线。',
+      policy: '框架草案不会自动保存，作者修改并保存后才确认。',
+      contextItems: ['当前框架文件', '其它框架文件', '已确认事实', '未闭合伏笔', '启用 Skill'],
+    }
+  }
+
+  if (view === 'chapter-blueprint') {
+    return {
+      kind: 'blueprint',
+      title: '章节蓝图助手',
+      target: '当前章节蓝图',
+      path: 'blueprints/chapters/*.md',
+      description: '生成或重生成章节蓝图，并在保存后触发后续蓝图覆盖链路。',
+      policy: '蓝图保存会影响后续章节蓝图，执行前请确认当前章方向。',
+      contextItems: ['当前章节蓝图', '作者输入', '故事框架', '事实库', '启用 Skill'],
+    }
+  }
+
+  if (view === 'draft-box') {
+    return {
+      kind: 'draft',
+      title: '候选稿助手',
+      target: '当前章节候选稿',
+      path: 'manuscript/candidates/*.md',
+      description: '候选稿只停留在草稿箱，必须由作者明确采用后才进入正文。',
+      policy: 'AI 输出不会自动覆盖正文。',
+      contextItems: ['写作任务书', '章节蓝图', '作者输入', '事实库', '钉选材料', '启用 Skill'],
+    }
+  }
+
+  if (view === 'manuscript') {
+    return {
+      kind: 'chapter',
+      title: '正文助手',
+      target: '作者确认正文',
+      path: 'manuscript/chapters/*.md',
+      description: '正文保存即作者确认，会更新确认日志和事实库链路。',
+      policy: '正文是最高优先级文本，候选稿必须手动采用。',
+      contextItems: ['当前正文', '确认日志', '事实库', '候选稿'],
+    }
+  }
+
+  if (module === 'knowledge') {
     return {
       kind: 'knowledge',
       title: '知识库助手',
-      target: getModuleViewTitle(activeModuleView),
-      path: 'facts/ 与 knowledge/',
-      description: '重扫事实、整理本地资料，并把检索材料装配进当前章任务书。',
-      policy: '知识库只提供上下文，不能越过作者确认链直接改正文。',
-      contextItems: ['导入资料', '事实库', '未闭合伏笔', '当前章任务书', '已启用 Skill'],
+      target: knowledgeTarget(moduleView),
+      path: 'facts/、knowledge/、skills/',
+      description: '管理事实、伏笔、本地资料、Skill 和检索上下文。',
+      policy: '知识库文件是普通本地文件，保存后才进入后续任务书。',
+      contextItems: ['已确认事实', '未闭合伏笔', '本地 Markdown', '钉选材料', 'Skill'],
     }
   }
 
-  if (activeModule === 'model-calls') {
+  if (module === 'model-calls' || view === 'ai-providers') {
     return {
       kind: 'provider',
-      title: '模型助手',
-      target: getModuleViewTitle(activeModuleView),
+      title: '模型调用助手',
+      target: 'AI Provider 配置与测试',
       path: '.olienta/ai-providers.json',
-      description: '配置、保存和测试多家 AI Provider，并追踪模型调用摘要。',
-      policy: '模型调用记录只保存摘要和本地路径，不记录 API Key 或完整正文。',
-      contextItems: ['Provider JSON', '模型调用记录', '当前项目配置'],
+      description: '维护项目级 AI Provider、连接测试和调用记录。',
+      policy: 'Provider 配置保存并测试后再用于真实生成。',
+      contextItems: ['Provider JSON', '测试结果', '调用记录'],
     }
   }
 
   return {
     kind: 'general',
     title: '上下文助手',
-    target: getModuleViewTitle(activeModuleView),
-    path: '当前页面上下文',
-    description: '根据当前页面调用对应上下文，生成前先确认边界。',
-    policy: '作者确认内容始终优先于 AI 输出。',
-    contextItems: ['当前页面文档', '事实库', '已启用 Skill'],
+    target: '当前工作区',
+    path: view,
+    description: '根据当前页面提供上下文检查和常用动作。',
+    policy: '所有生成内容都遵守本地文件优先和作者确认原则。',
+    contextItems: ['当前页面', '项目文件', '启用 Skill'],
   }
 }
 
-function getFrameworkTarget(view: ViewKey) {
-  if (view === 'story-premise') return '故事前提'
-  if (view === 'characters') return '角色图谱'
-  if (view === 'world') return '世界观'
-  if (view === 'plot-outline') return '情节大纲'
-  if (view === 'timeline') return '时间轴及里程碑'
-  return '故事构架'
+function frameworkTarget(view: ViewKey) {
+  const targets: Partial<Record<ViewKey, string>> = {
+    'story-premise': '故事前提',
+    characters: '角色图谱',
+    world: '世界观',
+    'plot-outline': '情节大纲',
+    timeline: '时间线及里程碑',
+  }
+  return targets[view] ?? '故事框架'
 }
 
-function getFrameworkPath(view: ViewKey) {
-  if (view === 'story-premise') return 'framework/02-premise.md'
-  if (view === 'characters') return 'framework/03-characters.md'
-  if (view === 'world') return 'framework/05-world.md'
-  if (view === 'plot-outline') return 'framework/04-plot-outline.md'
-  if (view === 'timeline') return 'timeline/events.md'
-  return 'framework/'
-}
-
-function getModuleViewTitle(view: ModuleSubViewKey) {
-  const titles: Partial<Record<ModuleSubViewKey, string>> = {
-    'home-entry': '首页',
-    'home-recent': '最近项目',
+function knowledgeTarget(view: ModuleSubViewKey) {
+  const targets: Partial<Record<ModuleSubViewKey, string>> = {
     'knowledge-overview': '知识库总览',
-    'knowledge-facts': '事实库',
+    'knowledge-facts': '事实与伏笔',
     'knowledge-markdown': '本地 Markdown',
     'knowledge-skills': 'Skill',
     'knowledge-search': '本地全文检索',
-    'characters-overview': '角色总览',
-    'characters-cards': '角色列表',
-    'characters-relations': '关系图谱',
-    'characters-growth': '成长线',
-    'tasks-current': '当前任务',
-    'tasks-history': '历史任务',
-    'logs-author-confirmation': '作者确认日志',
-    'logs-system-events': '系统事件',
-    'model-providers': 'AI Provider',
-    'model-call-records': '调用记录',
-    'model-tests': '连接测试',
   }
-
-  return titles[view] ?? '当前页面'
+  return targets[view] ?? '知识库'
 }
 
 function BlockHeader({ title, path }: { title: string; path: string }) {
@@ -571,21 +546,21 @@ function SideEditor({
   path,
   value,
   label,
+  saveLabel = '保存',
   onChange,
   onSave,
-  saveLabel = '保存',
 }: {
   title: string
   path: string
   value: string
   label: string
+  saveLabel?: string
   onChange: (content: string) => void
   onSave: () => void
-  saveLabel?: string
 }) {
   return (
     <section className="agent-block">
-      <div className="side-editor-header">
+      <div className="side-editor-header compact">
         <div>
           <h3>{title}</h3>
           <p>{path}</p>

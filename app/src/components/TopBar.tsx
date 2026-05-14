@@ -4,9 +4,7 @@ type Props = {
   project: ProjectSummary | null
 }
 
-export function TopBar({
-  project,
-}: Props) {
+export function TopBar({ project }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-title">

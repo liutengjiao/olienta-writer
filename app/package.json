@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "smoke:dev": "node scripts/dev-smoke.mjs",
     "preview": "vite preview",
     "sample:wutongboli": "node ../tools/import-wutongboli-sample.mjs",
     "desktop:dev": "tauri dev",

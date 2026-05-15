@@ -1,10 +1,11 @@
+import { DraftPanel, FocusMode, ManuscriptPanel } from './workspace/EditorPanels'
 import {
-  ChapterList,
-  DraftPanel,
-  FocusMode,
-  ManuscriptPanel,
-  MarkdownDocument,
-} from './workspace/EditorPanels'
+  BlueprintPanel,
+  FrameworkPanel,
+  HomePanel,
+  NovelSettingsPanel,
+  PageFrame,
+} from './workspace/CorePanels'
 import {
   ExportPanel,
   LocalFilesPanel,
@@ -163,14 +164,6 @@ const VIEW_TITLES: Record<string, string> = {
   'local-files': '本地 Markdown',
 }
 
-const FRAMEWORK_PATHS: Record<string, string> = {
-  'story-premise': 'framework/02-premise.md',
-  characters: 'framework/03-characters.md',
-  world: 'framework/05-world.md',
-  'plot-outline': 'framework/04-plot-outline.md',
-  timeline: 'timeline/events.md',
-}
-
 export function Workspace(props: Props) {
   if (props.focusMode) return <FocusMode {...props} />
 
@@ -209,66 +202,4 @@ function RouteContent(props: Props) {
   if (props.activeModule === 'logs') return <LogsPanel {...props} />
   if (props.activeView === 'exports') return <ExportPanel {...props} />
   return <FrameworkPanel {...props} />
-}
-
-function PageFrame(props: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <section className="page-frame">
-      <div className="page-heading">
-        <div>
-          <h1>{props.title}</h1>
-          {props.subtitle && <p>{props.subtitle}</p>}
-        </div>
-        <button type="button" className="ghost-button assistant-page-button" onClick={openAgent}>打开助手</button>
-      </div>
-      {props.children}
-    </section>
-  )
-}
-
-function HomePanel(props: Props) {
-  return (
-    <section className="editor-card">
-      <div className="card-heading"><h2>项目入口</h2></div>
-      <div className="settings-grid">
-        <label>项目名称<input value={props.form.name} onChange={(event) => props.onUpdateForm('name', event.target.value)} /></label>
-        <label>项目文件夹<input value={props.form.root_path} onChange={(event) => props.onUpdateForm('root_path', event.target.value)} /></label>
-        <label>语言<input value={props.form.language} onChange={(event) => props.onUpdateForm('language', event.target.value)} /></label>
-        <label>章节数<input type="number" value={props.form.chapter_count} onChange={(event) => props.onUpdateForm('chapter_count', Number(event.target.value))} /></label>
-      </div>
-      <div className="editor-actions">
-        <button className="ghost-button" onClick={props.onChooseFolder}>选择文件夹</button>
-        <button className="ghost-button" onClick={props.onOpenProject}>打开项目</button>
-        <button className="ghost-button" onClick={props.onOpenSampleProject}>打开样例</button>
-        <button className="primary-button" onClick={props.onCreateProject} disabled={props.busy}>创建项目</button>
-      </div>
-    </section>
-  )
-}
-
-function NovelSettingsPanel(props: Props) {
-  return (
-    <section className="editor-card">
-      <div className="card-heading"><h2>小说设置</h2></div>
-      <HomePanel {...props} />
-    </section>
-  )
-}
-
-function FrameworkPanel(props: Props) {
-  const path = FRAMEWORK_PATHS[props.activeView] ?? props.frameworkPath
-  return <MarkdownDocument title={VIEW_TITLES[props.activeView] ?? '框架文件'} path={path} value={props.frameworkContent || props.markdownPreview} onChange={props.onChangeMarkdownPreview} onSave={() => props.onSaveModuleMarkdownFile(path, props.markdownPreview || props.frameworkContent)} />
-}
-
-function BlueprintPanel(props: Props) {
-  return (
-    <section className="split-editor-layout">
-      <ChapterList {...props} />
-      <MarkdownDocument title="章节蓝图" path={props.blueprintPath} value={props.blueprint} onChange={props.onChangeBlueprint} onSave={props.onSaveBlueprint} actions={<><button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成草案</button><button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button></>} />
-    </section>
-  )
-}
-
-function openAgent() {
-  window.dispatchEvent(new CustomEvent('olienta:open-agent'))
 }

@@ -39,12 +39,19 @@ cd D:\windsurf\olienta\app
 npm run verify
 ```
 
-`npm run verify` runs the copy check, frontend build, lint, dev server smoke check, and Rust tests.
+`npm run verify` runs the copy check, frontend build, lint, dev server smoke check, core writing workflow smoke check, and Rust tests.
 
 The dev server smoke check verifies:
 
 - HTML status, content type, root mount, language, and title.
 - Linked Vite entry resources are reachable.
+
+The core writing workflow smoke check verifies:
+
+- A project can be opened and inspected.
+- Imported knowledge can be searched and pinned into a chapter writing brief.
+- A candidate draft can be generated without overwriting the confirmed manuscript.
+- Candidate adoption, chapter save, selected-chapter export, system events, and task history are recorded.
 - Vite error overlay marker is absent.
 - Key frontend source modules are reachable through Vite.
 - Core visible copy exists in the app entry, project panel, workspace, framework, document, and knowledge panels.

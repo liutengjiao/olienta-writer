@@ -5490,6 +5490,129 @@ mod tests {
     }
 
     #[test]
+    fn core_writing_workflow_smoke_covers_project_to_confirmed_manuscript() {
+        let (_temp, root) = create_temp_project(2);
+        let root_path = root.to_string_lossy().to_string();
+
+        let opened = open_project(root_path.clone()).unwrap();
+        assert_eq!(opened.chapter_count, 2);
+
+        fs::create_dir_all(root.join("knowledge/markdown/imported")).unwrap();
+        fs::write(
+            root.join("knowledge/markdown/imported/rain-receipt.md"),
+            "# Rain Receipt\n\nRainReceipt clue proves the transfer happened before dawn.\n",
+        )
+        .unwrap();
+
+        save_author_input(
+            root_path.clone(),
+            "001".to_owned(),
+            "# Chapter input\n\nUse RainReceipt as the concrete evidence.\n".to_owned(),
+        )
+        .unwrap();
+        save_blueprint(
+            root_path.clone(),
+            "001".to_owned(),
+            "# Chapter 001 blueprint\n\n## Must happen\n\n- The protagonist checks RainReceipt.\n\n## Forbidden\n\n- Do not solve the final mystery.\n".to_owned(),
+        )
+        .unwrap();
+        save_module_markdown_file(
+            root_path.clone(),
+            "facts/forbidden-rules.md".to_owned(),
+            "# Forbidden rules\n\n- Do not contradict confirmed manuscript.\n".to_owned(),
+        )
+        .unwrap();
+
+        let search_results = search_project_text_files_scoped(
+            root_path.clone(),
+            "RainReceipt".to_owned(),
+            "all".to_owned(),
+        )
+        .unwrap();
+        assert!(search_results
+            .iter()
+            .any(|result| result.relative_path == "knowledge/markdown/imported/rain-receipt.md"));
+        let imported_result = search_results
+            .iter()
+            .find(|result| result.relative_path == "knowledge/markdown/imported/rain-receipt.md")
+            .unwrap();
+
+        let brief = pin_search_results_to_writing_brief(
+            root_path.clone(),
+            "001".to_owned(),
+            vec![PinSearchResultInput {
+                source_path: imported_result.relative_path.clone(),
+                line_number: imported_result.line_number,
+                snippet: imported_result.snippet.clone(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(brief.relative_path, "tasks/writing-briefs/001.md");
+        assert!(brief.content.contains("RainReceipt"));
+        assert!(brief.content.contains("manuscript/candidates/001.md"));
+
+        let pinned = list_pinned_context(root_path.clone(), "001".to_owned()).unwrap();
+        assert_eq!(pinned.len(), 1);
+        assert_eq!(
+            pinned[0].source_path,
+            "knowledge/markdown/imported/rain-receipt.md"
+        );
+
+        let draft = generate_candidate_draft(root_path.clone(), "001".to_owned()).unwrap();
+        assert_eq!(draft.relative_path, "manuscript/candidates/001.md");
+        assert_eq!(draft.writing_brief_path, "tasks/writing-briefs/001.md");
+        assert!(root.join(&draft.relative_path).exists());
+        assert!(root.join(&draft.review_path).exists());
+        assert!(draft.content.contains("tasks/writing-briefs/001.md"));
+
+        let manuscript_before = load_chapter(root_path.clone(), "001".to_owned()).unwrap();
+        assert!(!manuscript_before
+            .content
+            .contains("tasks/writing-briefs/001.md"));
+
+        let adoption = record_candidate_adoption(
+            root_path.clone(),
+            "001".to_owned(),
+            "replace".to_owned(),
+            draft.relative_path.clone(),
+            "manuscript/chapters/001.md".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(adoption.relative_path, "logs/confirmations/001.md");
+
+        let saved =
+            save_chapter(root_path.clone(), "001".to_owned(), draft.content.clone()).unwrap();
+        assert_eq!(saved.chapter_id, "001");
+        assert!(saved.word_count > 0);
+
+        let chapters = list_chapters(root_path.clone()).unwrap();
+        assert_eq!(chapters[0].state, "已确认");
+        assert!(chapters[0].words > 0);
+
+        let exported = export_manuscript(ExportInput {
+            root_path: root_path.clone(),
+            format: "markdown".to_owned(),
+            scope: Some("selected".to_owned()),
+            chapter_id: None,
+            chapter_ids: Some(vec!["001".to_owned()]),
+        })
+        .unwrap();
+        assert_eq!(exported.relative_path, "exports/selected-chapters.md");
+        assert!(exported.content.contains("tasks/writing-briefs/001.md"));
+
+        let health = inspect_project_health(root_path.clone()).unwrap();
+        assert!(health.ready);
+
+        let events = fs::read_to_string(root.join("logs/system-events.jsonl")).unwrap();
+        assert!(events.contains("candidate_adopted"));
+        assert!(events.contains("chapter_saved"));
+        let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
+        assert!(task_history.contains("search_results_pinned_to_brief"));
+        assert!(task_history.contains("writing_brief_composed"));
+        assert!(task_history.contains("candidate_draft_generated"));
+    }
+
+    #[test]
     fn search_scope_batch_pin_and_remove_recompose_writing_brief() {
         let (_temp, root) = create_temp_project(1);
 

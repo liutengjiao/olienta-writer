@@ -12,6 +12,7 @@ const steps = [
   { label: 'frontend build', command: 'npm', args: ['run', 'build'], cwd: appDir },
   { label: 'frontend lint', command: 'npm', args: ['run', 'lint'], cwd: appDir },
   { label: 'dev server smoke', command: 'npm', args: ['run', 'smoke:dev'], cwd: appDir, needsDevServer: true },
+  { label: 'workflow smoke', command: 'cargo', args: ['test', 'core_writing_workflow_smoke', '--', '--nocapture'], cwd: tauriDir },
   { label: 'rust tests', command: 'cargo', args: ['test'], cwd: tauriDir },
 ]
 

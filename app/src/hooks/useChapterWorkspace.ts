@@ -119,9 +119,9 @@ export function useChapterWorkspace({
 
     try {
       if (!isTauriRuntime) {
-      setSaveState('预览已保存')
-      setTaskStatus('project', 'done')
-      setMessage('浏览器预览已模拟保存；桌面端会写入正文、作者确认记录和事件日志。')
+        setSaveState('预览已保存')
+        setTaskStatus('project', 'done')
+        setMessage('浏览器预览已模拟保存；桌面端会写入正文、作者确认记录和事件日志。')
         return true
       }
 

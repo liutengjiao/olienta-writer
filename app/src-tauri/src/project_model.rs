@@ -551,10 +551,10 @@ pub fn generate_blueprint_draft(
             input_path: Some("framework/ + facts/ + manuscript/author-input/当前章.md"),
             output_path: Some(&relative_path),
             ok: true,
-            message: "Blueprint draft generated into editor area; not saved as official blueprint yet.",
+            message:
+                "Blueprint draft generated into editor area; not saved as official blueprint yet.",
         },
     )?;
-
 
     Ok(ProjectFileDocument {
         relative_path,
@@ -714,7 +714,8 @@ pub fn compose_writing_brief(
     let id = normalize_chapter_id(&chapter_id);
     let relative_path = format!("tasks/writing-briefs/{id}.md");
     let blueprint = read_optional_project_file(&root, &format!("blueprints/chapters/{id}.md"))?;
-    let author_input = read_optional_project_file(&root, &format!("manuscript/author-input/{id}.md"))?;
+    let author_input =
+        read_optional_project_file(&root, &format!("manuscript/author-input/{id}.md"))?;
     let confirmed_facts = read_optional_project_file(&root, "facts/confirmed-facts.md")?;
     let classified_facts = read_classified_fact_files(&root)?;
     let author_confirmation = read_optional_project_file(&root, "facts/author-confirmation.md")?;
@@ -723,7 +724,8 @@ pub fn compose_writing_brief(
     let framework = read_framework_files(&root)?;
     let character_context = read_character_context(&root)?;
     let timeline_context = read_timeline_context(&root)?;
-    let pinned_context = read_optional_project_file(&root, &format!("tasks/pinned-context/{id}.md"))?;
+    let pinned_context =
+        read_optional_project_file(&root, &format!("tasks/pinned-context/{id}.md"))?;
     let skills = read_selected_skills(&root)?;
 
     let mut content = String::new();
@@ -2657,7 +2659,21 @@ fn character_name_from_heading(heading: &str) -> Option<String> {
         .trim()
         .trim_start_matches(|value: char| {
             value.is_ascii_digit()
-                || matches!(value, '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '、' | '.' | ' ')
+                || matches!(
+                    value,
+                    '一' | '二'
+                        | '三'
+                        | '四'
+                        | '五'
+                        | '六'
+                        | '七'
+                        | '八'
+                        | '九'
+                        | '十'
+                        | '、'
+                        | '.'
+                        | ' '
+                )
         })
         .trim();
     let candidate = without_order
@@ -3308,15 +3324,7 @@ fn extract_chapter_facts(chapter_id: &str, title: &str, content: &str) -> Vec<St
     }
 
     for keyword in [
-        "广州",
-        "上海",
-        "深圳",
-        "手术",
-        "股权",
-        "诊所",
-        "现金",
-        "病历",
-        "CBD",
+        "广州", "上海", "深圳", "手术", "股权", "诊所", "现金", "病历", "CBD",
     ] {
         if content.contains(keyword) {
             facts.push(format!("- {chapter_id} 提到关键词：{keyword}。"));
@@ -3352,7 +3360,11 @@ fn classified_fact_path(fact: &str) -> &'static str {
         "facts/character-facts.md"
     } else if fact.contains("时间") || fact.contains("年") || fact.contains("章") {
         "facts/time-facts.md"
-    } else if fact.contains("地点") || fact.contains("CBD") || fact.contains("深圳") || fact.contains("诊所") {
+    } else if fact.contains("地点")
+        || fact.contains("CBD")
+        || fact.contains("深圳")
+        || fact.contains("诊所")
+    {
         "facts/location-facts.md"
     } else if fact.contains("关系") || fact.contains("冲突") || fact.contains("爱") {
         "facts/relation-facts.md"
@@ -3377,7 +3389,8 @@ fn read_classified_fact_files(root: &Path) -> Result<String, ProjectError> {
 fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), ProjectError> {
     fs::create_dir_all(ensure_project_path(root, "logs/model-calls")?)?;
     let target = ensure_project_path(root, "logs/model-calls/history.md")?;
-    let mut content = fs::read_to_string(&target).unwrap_or_else(|_| "# Model Call History\n\n".to_owned());
+    let mut content =
+        fs::read_to_string(&target).unwrap_or_else(|_| "# Model Call History\n\n".to_owned());
     content.push_str(&format!(
         "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- message: {}\n",
         log.task,
@@ -3428,7 +3441,11 @@ fn provider_label(provider: &AiProviderConfig) -> String {
         .or(provider.id.as_deref())
         .unwrap_or("provider")
         .to_owned();
-    match provider.model.as_deref().filter(|value| !value.trim().is_empty()) {
+    match provider
+        .model
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         Some(model) => format!("{name} ({model})"),
         None => name,
     }
@@ -3682,15 +3699,14 @@ fn review_candidate_against_blueprint(content: &str, blueprint: &str) -> Vec<Str
         }
     }
 
-    let must_happen = collect_labeled_lines(
-        blueprint,
-        &["必须发生", "本章目标", "关键动作", "必须写到"],
-    );
-    for keyword in extract_keywords_from_lines(&must_happen).into_iter().take(6) {
+    let must_happen =
+        collect_labeled_lines(blueprint, &["必须发生", "本章目标", "关键动作", "必须写到"]);
+    for keyword in extract_keywords_from_lines(&must_happen)
+        .into_iter()
+        .take(6)
+    {
         if keyword.chars().count() >= 2 && !content.contains(&keyword) {
-            warnings.push(format!(
-                "候选稿可能遗漏本章必须发生内容：“{keyword}”。"
-            ));
+            warnings.push(format!("候选稿可能遗漏本章必须发生内容：“{keyword}”。"));
         }
     }
 
@@ -3714,7 +3730,8 @@ fn review_candidate_against_constraints(
             .iter()
             .filter(|keyword| content.contains(keyword.as_str()))
             .count();
-        if hits > 0 && (line.contains("禁止") || line.contains("不得") || line.contains("不能")) {
+        if hits > 0 && (line.contains("禁止") || line.contains("不得") || line.contains("不能"))
+        {
             warnings.push(format!(
                 "候选稿可能违反事实或禁写规则：{}",
                 trim_for_status(&line)
@@ -3740,7 +3757,8 @@ fn review_candidate_against_character_context(
     character_context: &str,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    if character_context.trim().is_empty() || character_context.contains("还没有可用的角色上下文") {
+    if character_context.trim().is_empty() || character_context.contains("还没有可用的角色上下文")
+    {
         return warnings;
     }
 
@@ -3981,15 +3999,7 @@ fn constraint_keywords(content: &str) -> Vec<String> {
     }
     push_keyword(&mut keywords, &mut current, &stop_words);
     for term in [
-        "身份",
-        "欲望",
-        "恐惧",
-        "边界",
-        "禁忌",
-        "底线",
-        "目标",
-        "动机",
-        "关系",
+        "身份", "欲望", "恐惧", "边界", "禁忌", "底线", "目标", "动机", "关系",
     ] {
         if content.contains(term) {
             keywords.push(term.to_owned());
@@ -4066,6 +4076,8 @@ fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ProjectError> {
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
 </Types>"#,
         )?;
 
@@ -4079,8 +4091,18 @@ fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ProjectError> {
         )?;
 
         zip.add_directory("word/", options)?;
+        zip.add_directory("word/_rels/", options)?;
+        zip.start_file("word/_rels/document.xml.rels", options)?;
+        zip.write_all(docx_document_rels_xml().as_bytes())?;
+
         zip.start_file("word/styles.xml", options)?;
         zip.write_all(docx_styles_xml().as_bytes())?;
+
+        zip.start_file("word/header1.xml", options)?;
+        zip.write_all(docx_header_xml().as_bytes())?;
+
+        zip.start_file("word/footer1.xml", options)?;
+        zip.write_all(docx_footer_xml().as_bytes())?;
 
         zip.start_file("word/document.xml", options)?;
         zip.write_all(docx_document_xml(markdown).as_bytes())?;
@@ -4093,6 +4115,7 @@ fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ProjectError> {
 fn docx_document_xml(markdown: &str) -> String {
     let mut paragraphs = String::new();
     let mut list_index = 0;
+    let mut heading_one_count = 0;
 
     for raw_line in markdown.lines() {
         let line = raw_line.trim();
@@ -4100,30 +4123,41 @@ fn docx_document_xml(markdown: &str) -> String {
             continue;
         }
 
-        let (style, text, first_line, bullet) = if let Some(text) = line.strip_prefix("# ") {
-            ("Heading1", text.trim(), false, false)
-        } else if let Some(text) = line.strip_prefix("## ") {
-            ("Heading2", text.trim(), false, false)
-        } else if let Some(text) = line.strip_prefix("### ") {
-            ("Heading3", text.trim(), false, false)
-        } else if let Some(text) = line.strip_prefix(">") {
-            ("Quote", text.trim(), false, false)
-        } else if let Some(text) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
-            list_index += 1;
-            ("Normal", text.trim(), false, true)
-        } else {
-            ("Normal", line, true, false)
-        };
+        let (style, text, first_line, bullet, page_break_before) =
+            if let Some(text) = line.strip_prefix("# ") {
+                heading_one_count += 1;
+                ("Heading1", text.trim(), false, false, heading_one_count > 1)
+            } else if let Some(text) = line.strip_prefix("## ") {
+                ("Heading2", text.trim(), false, false, false)
+            } else if let Some(text) = line.strip_prefix("### ") {
+                ("Heading3", text.trim(), false, false, false)
+            } else if let Some(text) = line.strip_prefix(">") {
+                ("Quote", text.trim(), false, false, false)
+            } else if let Some(text) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
+                list_index += 1;
+                ("Normal", text.trim(), false, true, false)
+            } else {
+                ("Normal", line, true, false, false)
+            };
 
-        paragraphs.push_str(&docx_paragraph(style, text, first_line, bullet, list_index));
+        paragraphs.push_str(&docx_paragraph(
+            style,
+            text,
+            first_line,
+            bullet,
+            list_index,
+            page_break_before,
+        ));
     }
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
     {paragraphs}
     <w:sectPr>
+      <w:headerReference w:type="default" r:id="rIdHeader1"/>
+      <w:footerReference w:type="default" r:id="rIdFooter1"/>
       <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
     </w:sectPr>
@@ -4132,7 +4166,14 @@ fn docx_document_xml(markdown: &str) -> String {
     )
 }
 
-fn docx_paragraph(style: &str, text: &str, first_line: bool, bullet: bool, index: usize) -> String {
+fn docx_paragraph(
+    style: &str,
+    text: &str,
+    first_line: bool,
+    bullet: bool,
+    index: usize,
+    page_break_before: bool,
+) -> String {
     let escaped = xml_escape(&strip_markdown_inline(text));
     let style_xml = if style == "Normal" {
         String::new()
@@ -4146,6 +4187,11 @@ fn docx_paragraph(style: &str, text: &str, first_line: bool, bullet: bool, index
     } else {
         String::new()
     };
+    let page_break_xml = if page_break_before {
+        r#"<w:pageBreakBefore/>"#
+    } else {
+        ""
+    };
     let bullet_text = if bullet {
         format!("{}. {escaped}", index)
     } else {
@@ -4153,30 +4199,85 @@ fn docx_paragraph(style: &str, text: &str, first_line: bool, bullet: bool, index
     };
 
     format!(
-        r#"<w:p><w:pPr>{style_xml}{indent_xml}</w:pPr><w:r><w:t>{bullet_text}</w:t></w:r></w:p>"#
+        r#"<w:p><w:pPr>{style_xml}{page_break_xml}{indent_xml}</w:pPr><w:r><w:t>{bullet_text}</w:t></w:r></w:p>"#
     )
+}
+
+fn docx_document_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdHeader1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+  <Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+</Relationships>"#
+        .to_owned()
+}
+
+fn docx_header_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="right"/></w:pPr>
+    <w:r><w:t>Olienta 作品导出</w:t></w:r>
+  </w:p>
+</w:hdr>"#
+        .to_owned()
+}
+
+fn docx_footer_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:t>第 </w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+    <w:r><w:t>1</w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+    <w:r><w:t> 页</w:t></w:r>
+  </w:p>
+</w:ftr>"#
+        .to_owned()
 }
 
 fn docx_styles_xml() -> String {
     r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="SimSun"/>
+        <w:sz w:val="24"/><w:szCs w:val="24"/>
+      </w:rPr>
+    </w:rPrDefault>
+    <w:pPrDefault>
+      <w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr>
+    </w:pPrDefault>
+  </w:docDefaults>
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
     <w:name w:val="Normal"/>
-    <w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+    <w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="SimSun"/>
+      <w:sz w:val="24"/><w:szCs w:val="24"/>
+    </w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="heading 1"/>
     <w:basedOn w:val="Normal"/>
+    <w:pPr><w:jc w:val="center"/><w:spacing w:before="240" w:after="240"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
     <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="180" w:after="120"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading3">
     <w:name w:val="heading 3"/>
     <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="120" w:after="80"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="25"/><w:szCs w:val="25"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Quote">
@@ -4533,16 +4634,28 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
         "knowledge/search/README.md",
         "# 本地全文检索\n\n检索结果可以钉选进当前章节任务书。\n",
     )?;
-    write_if_missing(root, "characters/cards/README.md", "# 角色卡\n\n从角色图谱抽取的角色卡会保存在这里。\n")?;
+    write_if_missing(
+        root,
+        "characters/cards/README.md",
+        "# 角色卡\n\n从角色图谱抽取的角色卡会保存在这里。\n",
+    )?;
     write_if_missing(root, "characters/cards/INDEX.md", "# 角色卡索引\n\n")?;
     write_if_missing(root, "characters/relations.md", "# 关系图谱\n\n")?;
     write_if_missing(root, "characters/growth.md", "# 角色成长线\n\n")?;
     write_if_missing(root, "tasks/history.jsonl", "")?;
     write_if_missing(root, "tasks/current.json", "{}\n")?;
     write_if_missing(root, "logs/system-events.jsonl", "")?;
-    write_if_missing(root, "logs/model-calls/README.md", "# 模型调用\n\n这里记录 Provider 测试和 AI 调用历史。\n")?;
+    write_if_missing(
+        root,
+        "logs/model-calls/README.md",
+        "# 模型调用\n\n这里记录 Provider 测试和 AI 调用历史。\n",
+    )?;
     write_if_missing(root, "logs/model-calls/history.md", "# 模型调用记录\n\n")?;
-    write_if_missing(root, "models/README.md", "# 模型调用\n\nAI Provider 配置保存在 `.olienta/ai-providers.json`。\n")?;
+    write_if_missing(
+        root,
+        "models/README.md",
+        "# 模型调用\n\nAI Provider 配置保存在 `.olienta/ai-providers.json`。\n",
+    )?;
     write_if_missing(
         root,
         ".olienta/ai-providers.json",
@@ -4597,7 +4710,9 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
         write_if_missing(
             root,
             &format!("blueprints/chapters/{id}.md"),
-            &format!("# 第 {chapter} 章蓝图\n\n## 本章目标\n\n## 必须发生\n\n## 禁止提前\n\n## 备注\n\n"),
+            &format!(
+                "# 第 {chapter} 章蓝图\n\n## 本章目标\n\n## 必须发生\n\n## 禁止提前\n\n## 备注\n\n"
+            ),
         )?;
     }
 
@@ -4934,6 +5049,7 @@ fn is_editable_module_markdown(relative_path: &str) -> bool {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Read;
 
     fn create_temp_project(chapter_count: u32) -> (tempfile::TempDir, std::path::PathBuf) {
         let temp = tempfile::tempdir().unwrap();
@@ -4989,14 +5105,24 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("legacy-novel");
         fs::create_dir_all(root.join("framework")).unwrap();
-        fs::write(root.join("framework/04-world.md"), "# 旧世界观\n\n保留世界设定。").unwrap();
-        fs::write(root.join("framework/05-plot.md"), "# 旧情节大纲\n\n保留情节设计。").unwrap();
+        fs::write(
+            root.join("framework/04-world.md"),
+            "# 旧世界观\n\n保留世界设定。",
+        )
+        .unwrap();
+        fs::write(
+            root.join("framework/05-plot.md"),
+            "# 旧情节大纲\n\n保留情节设计。",
+        )
+        .unwrap();
 
         open_project(root.to_string_lossy().to_string()).unwrap();
 
-        assert!(fs::read_to_string(root.join("framework/04-plot-outline.md"))
-            .unwrap()
-            .contains("保留情节设计"));
+        assert!(
+            fs::read_to_string(root.join("framework/04-plot-outline.md"))
+                .unwrap()
+                .contains("保留情节设计")
+        );
         assert!(fs::read_to_string(root.join("framework/05-world.md"))
             .unwrap()
             .contains("保留世界设定"));
@@ -5052,9 +5178,14 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(imported.relative_path, "knowledge/markdown/imported/外部资料.md");
+        assert_eq!(
+            imported.relative_path,
+            "knowledge/markdown/imported/外部资料.md"
+        );
         assert!(imported.content.contains("全文检索"));
-        assert!(root.join("knowledge/markdown/imported/外部资料.md").exists());
+        assert!(root
+            .join("knowledge/markdown/imported/外部资料.md")
+            .exists());
     }
 
     #[test]
@@ -5070,9 +5201,11 @@ mod tests {
 
         assert_eq!(saved.chapter_id, "001");
         assert!(saved.word_count > 0);
-        assert!(fs::read_to_string(root.join("facts/author-confirmation.md"))
-            .unwrap()
-            .contains("001"));
+        assert!(
+            fs::read_to_string(root.join("facts/author-confirmation.md"))
+                .unwrap()
+                .contains("001")
+        );
         let time_facts = fs::read_to_string(root.join("facts/time-facts.md")).unwrap();
         assert!(time_facts.contains("# 时间事实"));
         let location_facts = fs::read_to_string(root.join("facts/location-facts.md")).unwrap();
@@ -5093,8 +5226,10 @@ mod tests {
             "作者修改后的候选稿。".to_owned(),
         )
         .unwrap();
-        let candidate = load_candidate(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
-        let manuscript = load_chapter(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        let candidate =
+            load_candidate(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        let manuscript =
+            load_chapter(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
 
         assert!(candidate.content.contains("候选稿"));
         assert!(!manuscript.content.contains("候选稿"));
@@ -5135,11 +5270,16 @@ mod tests {
         assert!(brief.content.contains("钉选检索材料"));
         assert!(brief.content.contains("雨夜收据"));
 
-        let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        let pinned =
+            list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
         assert_eq!(pinned.len(), 1);
-        assert_eq!(pinned[0].source_path, "knowledge/markdown/imported/source.md");
+        assert_eq!(
+            pinned[0].source_path,
+            "knowledge/markdown/imported/source.md"
+        );
 
-        let draft = generate_candidate_draft(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        let draft =
+            generate_candidate_draft(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
         assert_eq!(draft.relative_path, "manuscript/candidates/001.md");
         assert_eq!(draft.writing_brief_path, "tasks/writing-briefs/001.md");
         assert!(draft.review_path.ends_with("001.md"));
@@ -5148,8 +5288,7 @@ mod tests {
         assert!(review_report.contains("# 第 001 章候选稿审查"));
         assert!(review_report.contains("### 生成与任务书"));
 
-        let before_adoption =
-            fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap();
+        let before_adoption = fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap();
         assert!(!before_adoption.contains("候选稿"));
 
         let confirmation = record_candidate_adoption(
@@ -5171,9 +5310,11 @@ mod tests {
         .unwrap();
         let confirmed = load_chapter(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
         assert!(confirmed.content.contains("候选稿"));
-        assert!(fs::read_to_string(root.join("facts/author-confirmation.md"))
-            .unwrap()
-            .contains("001"));
+        assert!(
+            fs::read_to_string(root.join("facts/author-confirmation.md"))
+                .unwrap()
+                .contains("001")
+        );
 
         let exported = export_manuscript(ExportInput {
             root_path: root.to_string_lossy().to_string(),
@@ -5268,15 +5409,13 @@ mod tests {
         assert!(brief.content.contains("钉选检索材料"));
         assert!(brief.content.contains("source-a.md"));
 
-        let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        let pinned =
+            list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
         assert_eq!(pinned.len(), 2);
 
-        let recomposed = remove_pinned_context_item(
-            root.to_string_lossy().to_string(),
-            "001".to_owned(),
-            0,
-        )
-        .unwrap();
+        let recomposed =
+            remove_pinned_context_item(root.to_string_lossy().to_string(), "001".to_owned(), 0)
+                .unwrap();
         let pinned_after_remove =
             list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
         assert_eq!(pinned_after_remove.len(), 1);
@@ -5387,6 +5526,33 @@ mod tests {
     }
 
     #[test]
+    fn docx_export_includes_manuscript_layout_parts() {
+        let bytes = markdown_to_docx(
+            "# 测试作品\n\n第一段正文。\n\n# 第二章\n\n第二章正文。\n\n> 引用内容\n\n- 列表项",
+        )
+        .unwrap();
+
+        let content_types = read_docx_part(&bytes, "[Content_Types].xml");
+        let relationships = read_docx_part(&bytes, "word/_rels/document.xml.rels");
+        let document = read_docx_part(&bytes, "word/document.xml");
+        let styles = read_docx_part(&bytes, "word/styles.xml");
+        let header = read_docx_part(&bytes, "word/header1.xml");
+        let footer = read_docx_part(&bytes, "word/footer1.xml");
+
+        assert!(content_types.contains("/word/header1.xml"));
+        assert!(content_types.contains("/word/footer1.xml"));
+        assert!(relationships.contains("relationships/header"));
+        assert!(relationships.contains("relationships/footer"));
+        assert!(document.contains("w:headerReference"));
+        assert!(document.contains("w:footerReference"));
+        assert!(document.contains("w:pageBreakBefore"));
+        assert!(styles.contains(r#"w:eastAsia="SimSun""#));
+        assert!(styles.contains(r#"w:line="360""#));
+        assert!(header.contains("Olienta 作品导出"));
+        assert!(footer.contains(" PAGE "));
+    }
+
+    #[test]
     fn timeline_events_can_be_loaded_and_saved() {
         let (_temp, root) = create_temp_project(3);
 
@@ -5399,5 +5565,13 @@ mod tests {
         let loaded = load_timeline_events(root.to_string_lossy().to_string()).unwrap();
         assert_eq!(loaded.relative_path, "timeline/events.md");
         assert!(loaded.content.contains("第一条线索"));
+    }
+
+    fn read_docx_part(bytes: &[u8], name: &str) -> String {
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.to_vec())).unwrap();
+        let mut file = archive.by_name(name).unwrap();
+        let mut text = String::new();
+        file.read_to_string(&mut text).unwrap();
+        text
     }
 }

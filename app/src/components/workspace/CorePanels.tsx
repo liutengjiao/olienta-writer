@@ -91,25 +91,77 @@ export function FrameworkPanel(props: WorkspaceProps) {
 
 export function BlueprintPanel(props: WorkspaceProps) {
   return (
-    <section className="split-editor-layout">
+    <section className="blueprint-workspace split-editor-layout">
       <ChapterList {...props} />
-      <MarkdownDocument
-        title="章节蓝图"
-        path={props.blueprintPath}
-        value={props.blueprint}
-        onChange={props.onChangeBlueprint}
-        onSave={props.onSaveBlueprint}
-        actions={
-          <>
-            <button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成草稿</button>
-            <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
-          </>
-        }
-      />
+      <div className="blueprint-editor-stack">
+        <MarkdownDocument
+          title="作者输入"
+          path={props.authorInputPath}
+          value={props.authorInput}
+          onChange={props.onChangeAuthorInput}
+          onSave={props.onSaveAuthorInput}
+          actions={
+            <button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成蓝图草稿</button>
+          }
+        />
+        <MarkdownDocument
+          title="章节蓝图"
+          path={props.blueprintPath}
+          value={props.blueprint}
+          onChange={props.onChangeBlueprint}
+          onSave={props.onSaveBlueprint}
+          actions={
+            <>
+              <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
+              <button className="ghost-button" onClick={props.onRegenerateFollowingBlueprints}>重生成后续</button>
+              <button className="ghost-button" onClick={props.onRegenerateAllBlueprints}>重生成全部</button>
+            </>
+          }
+        />
+      </div>
+      <aside className="blueprint-history">
+        <div className="panel-heading">
+          <h2>蓝图历史</h2>
+          <span>{props.blueprintHistory.length}</span>
+        </div>
+        <div className="compact-list">
+          {props.blueprintHistory.length === 0 && <p className="empty-note">还没有保存过蓝图历史。</p>}
+          {props.blueprintHistory.map((item) => (
+            <button
+              type="button"
+              className={`compact-row ${item.relative_path === props.selectedBlueprintHistoryPath ? 'active' : ''}`}
+              key={item.relative_path}
+              onClick={() => props.onLoadBlueprintHistory(item.relative_path)}
+            >
+              <strong>{item.name}</strong>
+              <span>{item.relative_path}</span>
+              <small>{formatBytes(item.bytes)}</small>
+            </button>
+          ))}
+        </div>
+        <textarea
+          className="history-preview"
+          readOnly
+          value={props.blueprintHistoryPreview || '选择一个已保存的蓝图版本进行预览。'}
+        />
+        <button
+          type="button"
+          className="primary-button"
+          disabled={!props.selectedBlueprintHistoryPath || !props.blueprintHistoryPreview.trim()}
+          onClick={() => props.onChangeBlueprint(props.blueprintHistoryPreview)}
+        >
+          恢复到编辑器
+        </button>
+      </aside>
     </section>
   )
 }
 
 function openAgent() {
   window.dispatchEvent(new CustomEvent('olienta:open-agent'))
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  return `${Math.round(bytes / 1024)} KB`
 }

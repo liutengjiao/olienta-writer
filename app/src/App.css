@@ -1888,9 +1888,51 @@ button:disabled {
 
 .blueprint-workspace {
   display: grid;
-  grid-template-columns: minmax(460px, 1fr) 260px;
+  grid-template-columns: minmax(150px, 190px) minmax(460px, 1fr) 260px;
   gap: 18px;
   align-items: start;
+}
+
+.blueprint-editor-stack {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.chapter-list-panel {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.chapter-list-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 3px 8px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--panel-2);
+}
+
+.chapter-list-item strong,
+.chapter-list-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-list-item small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+.chapter-list-item.active,
+.chapter-list-item:hover {
+  border-color: var(--accent);
+  background: #183150;
 }
 
 .draft-workspace {

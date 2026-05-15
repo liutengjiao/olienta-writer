@@ -16,7 +16,17 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/CorePanels.tsx',
-    includes: ['创建项目', '小说设置', '章节蓝图', '生成草案', 'onSaveFrameworkFile', 'onSaveTimelineEvents'],
+    includes: [
+      '创建项目',
+      '小说设置',
+      '章节蓝图',
+      '作者输入',
+      '蓝图历史',
+      '重生成后续',
+      '生成草案',
+      'onSaveFrameworkFile',
+      'onSaveTimelineEvents',
+    ],
   },
   {
     path: '/src/components/workspace/DocumentPanels.tsx',

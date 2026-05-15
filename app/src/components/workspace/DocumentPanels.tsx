@@ -57,6 +57,13 @@ export function SkillPanel(props: WorkspaceProps) {
               <strong>{file.name}</strong>
               <span>{file.relative_path} · {formatBytes(file.bytes)}</span>
             </button>
+            <div className="skill-meta-row" aria-label="Skill 分类和冲突标签">
+              <span className="skill-category">{formatSkillCategory(file.category)}</span>
+              <span>{formatSkillScope(file.scope)}</span>
+              {file.conflict_tags.map((tag) => (
+                <span className="skill-tag" key={tag}>{formatSkillTag(tag)}</span>
+              ))}
+            </div>
             <div className="skill-state-row">
               <label>
                 <input
@@ -87,6 +94,40 @@ export function SkillPanel(props: WorkspaceProps) {
       />
     </section>
   )
+}
+
+function formatSkillCategory(category: string) {
+  const labels: Record<string, string> = {
+    pacing: '节奏',
+    style: '风格',
+    structure: '结构',
+    facts: '事实',
+    blueprint: '蓝图',
+    general: '通用',
+  }
+  return labels[category] || category
+}
+
+function formatSkillScope(scope: string) {
+  const labels: Record<string, string> = {
+    chapter: '章节',
+    rewrite: '改写',
+    project: '全书',
+    general: '全局',
+  }
+  return labels[scope] || scope
+}
+
+function formatSkillTag(tag: string) {
+  const labels: Record<string, string> = {
+    'fast-pace': '快节奏',
+    'slow-burn': '慢节奏',
+    'strict-outline': '严格蓝图',
+    'free-rewrite': '自由改写',
+    'first-person': '第一人称',
+    'third-person': '第三人称',
+  }
+  return labels[tag] || tag
 }
 
 export function TasksPanel(props: WorkspaceProps) {

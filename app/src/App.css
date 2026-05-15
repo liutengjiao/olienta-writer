@@ -2639,6 +2639,34 @@ button:disabled {
   font-size: 11px;
 }
 
+.skill-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.skill-meta-row span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.skill-meta-row .skill-category {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  color: var(--text);
+}
+
+.skill-meta-row .skill-tag {
+  color: var(--accent);
+}
+
 .skill-state-row {
   display: flex;
   gap: 12px;

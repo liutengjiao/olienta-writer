@@ -147,6 +147,9 @@ export type SkillFileSummary = {
   bytes: number
   disabled: boolean
   temporary: boolean
+  category: string
+  conflict_tags: string[]
+  scope: string
 }
 
 export type BlueprintHistorySummary = {

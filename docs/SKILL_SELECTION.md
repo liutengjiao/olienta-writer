@@ -23,3 +23,25 @@ Olienta 的 Skill 模块现在分为两个确认库：长期选择库和临时�
 Skill 导入、长期停用/启用、临时启用/取消都会写入 `logs/system-events.jsonl`。
 
 这些事件只记录 Skill 名称和状态变化，用于追踪本章生成时可能受哪些写作方法影响；它不记录正文内容，也不能替代作者最终确认。
+
+## 结构化分类和冲突提示
+
+Skill 列表现在会为每个文件给出分类、作用范围和冲突标签。系统会优先读取 Markdown front matter，例如：
+
+```markdown
+---
+category: pacing
+scope: chapter
+conflicts: [fast]
+---
+```
+
+如果文件没有元数据，Olienta 会根据文件名和正文关键词推断分类。当前内置分类包括 `pacing`、`style`、`structure`、`facts`、`blueprint` 和 `general`。
+
+当前内置冲突标签包括：
+
+- `fast-pace` 与 `slow-burn`：提示节奏冲突。
+- `strict-outline` 与 `free-rewrite`：提示改写边界冲突。
+- `first-person` 与 `third-person`：提示叙事视角冲突。
+
+停用的 Skill 不参与冲突分析；如果同一个 Skill 被标记为临时启用，它会重新进入本次冲突分析和任务书上下文。

@@ -158,6 +158,9 @@ pub struct SkillFileSummary {
     pub bytes: u64,
     pub disabled: bool,
     pub temporary: bool,
+    pub category: String,
+    pub conflict_tags: Vec<String>,
+    pub scope: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1930,14 +1933,15 @@ pub fn list_selected_skills(root_path: String) -> Result<Vec<SkillFileSummary>, 
                 .and_then(|value| value.to_str())
                 .unwrap_or("unknown.md")
                 .to_owned();
-            let bytes = path.metadata().map(|metadata| metadata.len()).unwrap_or(0);
-            skills.push(SkillFileSummary {
-                name: name.clone(),
-                relative_path: format!("skills/selected/{name}"),
-                bytes,
-                disabled: disabled.contains(&name),
-                temporary: temporary.contains(&name),
-            });
+            let content = fs::read_to_string(&path).unwrap_or_default();
+            skills.push(build_skill_summary(
+                name.clone(),
+                format!("skills/selected/{name}"),
+                &path,
+                &content,
+                disabled.contains(&name),
+                temporary.contains(&name),
+            ));
         }
     }
 
@@ -1975,18 +1979,14 @@ pub fn import_skill_file(
             "sourcePath": source.to_string_lossy().to_string()
         }),
     )?;
-    let bytes = target
-        .metadata()
-        .map(|metadata| metadata.len())
-        .unwrap_or(0);
-
-    Ok(SkillFileSummary {
-        name: safe_name,
+    Ok(build_skill_summary(
+        safe_name,
         relative_path,
-        bytes,
-        disabled: false,
-        temporary: false,
-    })
+        &target,
+        &content,
+        false,
+        false,
+    ))
 }
 
 pub fn set_skill_disabled(
@@ -3011,6 +3011,211 @@ fn skill_file_name(file_name: &str) -> String {
     }
 }
 
+#[derive(Debug, Clone)]
+struct SkillAnalysis {
+    name: String,
+    category: String,
+    conflict_tags: Vec<String>,
+    scope: String,
+}
+
+fn build_skill_summary(
+    name: String,
+    relative_path: String,
+    path: &Path,
+    content: &str,
+    disabled: bool,
+    temporary: bool,
+) -> SkillFileSummary {
+    let analysis = analyze_skill_file(&name, content);
+    let bytes = path.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+
+    SkillFileSummary {
+        name,
+        relative_path,
+        bytes,
+        disabled,
+        temporary,
+        category: analysis.category,
+        conflict_tags: analysis.conflict_tags,
+        scope: analysis.scope,
+    }
+}
+
+fn analyze_skill_file(name: &str, content: &str) -> SkillAnalysis {
+    let metadata = parse_skill_front_matter(content);
+    let search = format!(
+        "{}\n{}",
+        name.to_ascii_lowercase(),
+        content.to_ascii_lowercase()
+    );
+    let category = metadata
+        .get("category")
+        .or_else(|| metadata.get("type"))
+        .cloned()
+        .unwrap_or_else(|| infer_skill_category(&search));
+    let scope = metadata
+        .get("scope")
+        .cloned()
+        .unwrap_or_else(|| infer_skill_scope(&search));
+    let mut conflict_tags = metadata
+        .get("conflicts")
+        .or_else(|| metadata.get("conflict_tags"))
+        .or_else(|| metadata.get("tags"))
+        .map(|value| parse_skill_list_value(value))
+        .unwrap_or_default();
+
+    add_inferred_skill_tags(&search, &mut conflict_tags);
+    conflict_tags.sort();
+    conflict_tags.dedup();
+
+    SkillAnalysis {
+        name: name.to_owned(),
+        category,
+        conflict_tags,
+        scope,
+    }
+}
+
+fn parse_skill_front_matter(content: &str) -> std::collections::HashMap<String, String> {
+    let mut metadata = std::collections::HashMap::new();
+    let normalized = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let Some(rest) = normalized.strip_prefix("---") else {
+        return metadata;
+    };
+    let rest = rest
+        .strip_prefix('\n')
+        .or_else(|| rest.strip_prefix("\r\n"));
+    let Some(rest) = rest else {
+        return metadata;
+    };
+
+    for line in rest.lines() {
+        if line.trim() == "---" {
+            break;
+        }
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let key = key.trim().to_ascii_lowercase();
+        let value = value.trim().trim_matches('"').trim_matches('\'').to_owned();
+        if !key.is_empty() && !value.is_empty() {
+            metadata.insert(key, value);
+        }
+    }
+
+    metadata
+}
+
+fn parse_skill_list_value(value: &str) -> Vec<String> {
+    let trimmed = value
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    trimmed
+        .split(',')
+        .flat_map(|part| part.split('|'))
+        .map(|part| part.trim().trim_matches('"').trim_matches('\''))
+        .filter(|part| !part.is_empty())
+        .map(normalize_skill_tag)
+        .collect()
+}
+
+fn infer_skill_category(search: &str) -> String {
+    if contains_any(search, &["pacing", "节奏", "爽点", "留白", "钩子"]) {
+        "pacing".to_owned()
+    } else if contains_any(
+        search,
+        &["style", "风格", "文风", "语气", "去ai味", "现实主义"],
+    ) {
+        "style".to_owned()
+    } else if contains_any(search, &["structure", "结构", "三幕", "起承转合", "章节"]) {
+        "structure".to_owned()
+    } else if contains_any(search, &["fact", "事实", "设定", "时间线", "一致性"]) {
+        "facts".to_owned()
+    } else if contains_any(search, &["blueprint", "蓝图", "大纲", "情节"]) {
+        "blueprint".to_owned()
+    } else {
+        "general".to_owned()
+    }
+}
+
+fn infer_skill_scope(search: &str) -> String {
+    if contains_any(search, &["chapter", "章节", "本章", "单章"]) {
+        "chapter".to_owned()
+    } else if contains_any(search, &["rewrite", "改写", "润色", "候选稿"]) {
+        "rewrite".to_owned()
+    } else if contains_any(search, &["project", "全书", "长期", "全局"]) {
+        "project".to_owned()
+    } else {
+        "general".to_owned()
+    }
+}
+
+fn add_inferred_skill_tags(search: &str, tags: &mut Vec<String>) {
+    if contains_any(
+        search,
+        &[
+            "fast-pace",
+            "快节奏",
+            "爽点",
+            "强钩子",
+            "强推进",
+            "商业节奏",
+        ],
+    ) {
+        tags.push("fast-pace".to_owned());
+    }
+    if contains_any(
+        search,
+        &["slow-burn", "慢节奏", "留白", "克制", "文学性", "现实主义"],
+    ) {
+        tags.push("slow-burn".to_owned());
+    }
+    if contains_any(
+        search,
+        &[
+            "strict-outline",
+            "严格遵循",
+            "不得改动",
+            "不得偏离",
+            "必须遵守",
+        ],
+    ) {
+        tags.push("strict-outline".to_owned());
+    }
+    if contains_any(
+        search,
+        &["free-rewrite", "自由发挥", "大胆改写", "即兴", "发散"],
+    ) {
+        tags.push("free-rewrite".to_owned());
+    }
+    if contains_any(search, &["first-person", "第一人称", "我叙事"]) {
+        tags.push("first-person".to_owned());
+    }
+    if contains_any(search, &["third-person", "第三人称", "他叙事", "她叙事"]) {
+        tags.push("third-person".to_owned());
+    }
+}
+
+fn normalize_skill_tag(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase().replace('_', "-");
+    match normalized.as_str() {
+        "fast" | "fast-paced" | "commercial" => "fast-pace".to_owned(),
+        "slow" | "slowburn" | "slow-paced" | "literary" => "slow-burn".to_owned(),
+        "strict" | "outline" | "strict-outline" => "strict-outline".to_owned(),
+        "free" | "rewrite" | "freeform" | "free-rewrite" => "free-rewrite".to_owned(),
+        "first" | "first-person" => "first-person".to_owned(),
+        "third" | "third-person" => "third-person".to_owned(),
+        _ => normalized,
+    }
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
 fn read_skill_name_list(root: &Path, relative_path: &str) -> Result<Vec<String>, ProjectError> {
     let path = ensure_project_path(root, relative_path)?;
     if !path.exists() {
@@ -3052,8 +3257,9 @@ fn update_skill_name_list(
 
 fn analyze_skill_conflicts_for_root(root: &Path) -> Result<Vec<String>, ProjectError> {
     let disabled = read_skill_name_list(root, ".olienta/disabled-skills.json")?;
+    let temporary = read_skill_name_list(root, ".olienta/temporary-skills.json")?;
     let skills_dir = ensure_project_path(root, "skills/selected")?;
-    let mut active_chunks = Vec::new();
+    let mut active_skills = Vec::new();
 
     if skills_dir.exists() {
         for entry in fs::read_dir(skills_dir)? {
@@ -3068,37 +3274,100 @@ fn analyze_skill_conflicts_for_root(root: &Path) -> Result<Vec<String>, ProjectE
                 .and_then(|value| value.to_str())
                 .map(skill_file_name)
                 .unwrap_or_else(|| "skill.md".to_owned());
-            if disabled.contains(&name) {
+            if disabled.contains(&name) && !temporary.contains(&name) {
                 continue;
             }
 
-            active_chunks.push(fs::read_to_string(path)?);
+            let content = fs::read_to_string(path)?;
+            active_skills.push(analyze_skill_file(&name, &content));
         }
     }
 
-    let content = active_chunks.join("\n").to_ascii_lowercase();
     let mut warnings = Vec::new();
-    if (content.contains("第一人称") || content.contains("first person"))
-        && (content.contains("第三人称") || content.contains("third person"))
-    {
-        warnings.push("存在第一人称和第三人称同时启用的写法规则，请确认叙事视角。".to_owned());
-    }
-    if (content.contains("快节奏") || content.contains("爽点") || content.contains("强推进"))
-        && (content.contains("慢节奏") || content.contains("留白") || content.contains("文学性"))
-    {
-        warnings.push("存在快节奏/爽点与慢节奏/留白并存的 Skill，请确认本章节奏。".to_owned());
-    }
-    if (content.contains("严格遵循") || content.contains("不得改动"))
-        && (content.contains("自由发挥") || content.contains("改写") || content.contains("即兴"))
-    {
-        warnings.push("存在严格遵循与自由发挥并存的 Skill，请确认 AI 的改写边界。".to_owned());
-    }
+    push_pair_conflict_warning(
+        &active_skills,
+        &mut warnings,
+        "fast-pace",
+        "slow-burn",
+        "节奏冲突",
+        "快节奏/爽点",
+        "慢节奏/留白",
+        "请确认本章节奏。",
+    );
+    push_pair_conflict_warning(
+        &active_skills,
+        &mut warnings,
+        "strict-outline",
+        "free-rewrite",
+        "改写边界冲突",
+        "严格遵循蓝图",
+        "自由发挥/大胆改写",
+        "请确认 AI 改写边界。",
+    );
+    push_pair_conflict_warning(
+        &active_skills,
+        &mut warnings,
+        "first-person",
+        "third-person",
+        "叙事视角冲突",
+        "第一人称",
+        "第三人称",
+        "请确认本章叙事视角。",
+    );
 
-    if warnings.is_empty() && !active_chunks.is_empty() {
-        warnings.push("已加载 Skill，未发现明显冲突。".to_owned());
+    if warnings.is_empty() && !active_skills.is_empty() {
+        warnings.push(format!(
+            "已启用 {} 个 Skill，分类：{}。未发现明显冲突。",
+            active_skills.len(),
+            summarize_skill_categories(&active_skills)
+        ));
     }
 
     Ok(warnings)
+}
+
+fn push_pair_conflict_warning(
+    skills: &[SkillAnalysis],
+    warnings: &mut Vec<String>,
+    left_tag: &str,
+    right_tag: &str,
+    title: &str,
+    left_label: &str,
+    right_label: &str,
+    action: &str,
+) {
+    let left = skill_names_with_tag(skills, left_tag);
+    let right = skill_names_with_tag(skills, right_tag);
+    if left.is_empty() || right.is_empty() {
+        return;
+    }
+
+    warnings.push(format!(
+        "{title}：{} 偏{left_label}，{} 偏{right_label}，{action}",
+        left.join("、"),
+        right.join("、")
+    ));
+}
+
+fn skill_names_with_tag(skills: &[SkillAnalysis], tag: &str) -> Vec<String> {
+    skills
+        .iter()
+        .filter(|skill| skill.conflict_tags.iter().any(|value| value == tag))
+        .map(|skill| skill.name.clone())
+        .collect()
+}
+
+fn summarize_skill_categories(skills: &[SkillAnalysis]) -> String {
+    let mut counts = std::collections::BTreeMap::<String, usize>::new();
+    for skill in skills {
+        *counts.entry(skill.category.clone()).or_default() += 1;
+    }
+
+    counts
+        .into_iter()
+        .map(|(category, count)| format!("{category} {count}"))
+        .collect::<Vec<_>>()
+        .join("、")
 }
 
 fn read_selected_skills(root: &Path) -> Result<String, ProjectError> {
@@ -5959,6 +6228,70 @@ mod tests {
         let loaded = load_timeline_events(root.to_string_lossy().to_string()).unwrap();
         assert_eq!(loaded.relative_path, "timeline/events.md");
         assert!(loaded.content.contains("第一条线索"));
+    }
+
+    #[test]
+    fn skill_summary_infers_category_tags_and_named_conflicts() {
+        let (_temp, root) = create_temp_project(1);
+        let skills_dir = root.join("skills/selected");
+        fs::write(
+            skills_dir.join("fast.md"),
+            "---\ncategory: pacing\nscope: chapter\nconflicts: [fast]\n---\n\n强调快节奏、爽点和强钩子。",
+        )
+        .unwrap();
+        fs::write(
+            skills_dir.join("slow.md"),
+            "# 慢节奏\n\n保持留白、克制和现实主义。",
+        )
+        .unwrap();
+
+        let skills = list_selected_skills(root.to_string_lossy().to_string()).unwrap();
+        let fast = skills.iter().find(|skill| skill.name == "fast.md").unwrap();
+        let slow = skills.iter().find(|skill| skill.name == "slow.md").unwrap();
+        assert_eq!(fast.category, "pacing");
+        assert_eq!(fast.scope, "chapter");
+        assert!(fast.conflict_tags.contains(&"fast-pace".to_owned()));
+        assert_eq!(slow.category, "pacing");
+        assert!(slow.conflict_tags.contains(&"slow-burn".to_owned()));
+
+        let warnings = analyze_skill_conflicts(root.to_string_lossy().to_string()).unwrap();
+        assert!(warnings.iter().any(|warning| {
+            warning.contains("节奏冲突")
+                && warning.contains("fast.md")
+                && warning.contains("slow.md")
+        }));
+    }
+
+    #[test]
+    fn disabled_skill_is_ignored_unless_marked_temporary() {
+        let (_temp, root) = create_temp_project(1);
+        let skills_dir = root.join("skills/selected");
+        fs::write(skills_dir.join("strict.md"), "严格遵循蓝图，不得偏离。").unwrap();
+        fs::write(skills_dir.join("free.md"), "自由发挥，大胆改写。").unwrap();
+
+        set_skill_disabled(
+            root.to_string_lossy().to_string(),
+            "free.md".to_owned(),
+            true,
+        )
+        .unwrap();
+        let warnings = analyze_skill_conflicts(root.to_string_lossy().to_string()).unwrap();
+        assert!(!warnings
+            .iter()
+            .any(|warning| warning.contains("改写边界冲突")));
+
+        set_temporary_skill(
+            root.to_string_lossy().to_string(),
+            "free.md".to_owned(),
+            true,
+        )
+        .unwrap();
+        let warnings = analyze_skill_conflicts(root.to_string_lossy().to_string()).unwrap();
+        assert!(warnings.iter().any(|warning| {
+            warning.contains("改写边界冲突")
+                && warning.contains("strict.md")
+                && warning.contains("free.md")
+        }));
     }
 
     fn read_docx_part(bytes: &[u8], name: &str) -> String {

@@ -398,6 +398,9 @@ export function useProjectResources({
           bytes: 0,
           disabled: false,
           temporary: false,
+          category: 'general',
+          conflict_tags: [],
+          scope: 'general',
         },
       ])
       setSkillWarnings(['预览模式：桌面端会显示真实 Skill 冲突提示。'])

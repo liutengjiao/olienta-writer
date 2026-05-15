@@ -34,7 +34,7 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/DocumentPanels.tsx',
-    includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '导出', '选中章节', 'exportSelected', '模型调用', 'PROVIDER_USE_CASES', '导出 JSON', '导入 JSON', 'skill-meta-row', 'formatSkillCategory', 'formatSkillTag'],
+    includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '导出', '选中章节', 'exportSelected', '模型调用', 'PROVIDER_USE_CASES', '导出 JSON', '导入 JSON', 'skill-meta-row', 'formatSkillCategory', 'formatSkillTag', 'buildProviderExportJson', '导出 JSON 默认不包含密钥'],
   },
   {
     path: '/src/components/workspace/KnowledgePanels.tsx',

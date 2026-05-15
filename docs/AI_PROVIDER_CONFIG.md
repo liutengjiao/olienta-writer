@@ -8,6 +8,7 @@ Olienta 的 AI Provider 配置按项目本地保存。当前版本已经接入 O
 
 ```text
 .olienta/ai-providers.json
+.olienta/provider-secret.key
 logs/model-calls/history.md
 ```
 
@@ -16,6 +17,8 @@ logs/model-calls/history.md
 `logs/model-calls/history.md` 只记录调用摘要、输入路径、输出路径、Provider 名称和结果说明，不记录 API Key。
 
 `logs/system-events.jsonl` 会在保存 Provider 配置时写入 `providers_saved` 事件。事件只记录 Provider 数量、启用数量、名称、模型和用途，不记录 `apiKey` 字段。
+
+保存 Provider 时，后端会把非空 `apiKey` 转成 `apiKeyEncrypted` 写入 `.olienta/ai-providers.json`，并在 `.olienta/provider-secret.key` 中保存本项目的本地解密材料。加载到编辑器时会临时还原成 `apiKey`，方便作者修改和测试。这个机制用于避免项目 JSON 直接暴露明文密钥；它不是系统钥匙串，拥有整个项目文件夹的人仍可能恢复密钥。
 
 ## 当前支持的供应商类型
 
@@ -121,14 +124,14 @@ Provider 测试会写入 `logs/model-calls/history.md`，便于之后追查连�
 
 ## 当前限制
 
-- API Key 目前保存为本地项目 JSON 明文。后续应支持系统钥匙串或本机加密。
+- API Key 已不再直接明文写入 `.olienta/ai-providers.json`，但当前仍是项目内本地加密材料，不等同于系统钥匙串。后续仍应接入系统钥匙串或平台级安全存储。
 - 真实调用目前优先覆盖 OpenAI-compatible 接口；其它供应商会先按兼容接口和本地占位处理，后续再逐个适配官方协议。
 - 生成还不是流式显示。
 - Provider 分组仍未独立建模，目前主要依靠用途映射和排序管理。
 
 ## 下一步
 
-1. 将 API Key 改为系统钥匙串或本机加密保存。
+1. 将 API Key 从项目内本地加密升级为系统钥匙串或平台级安全存储。
 2. 给各用途增加明确的模型选择策略。
 3. 增加 Provider 分组和成本/速度标记。
 4. 增加流式生成和可中止任务。

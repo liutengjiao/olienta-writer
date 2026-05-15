@@ -395,7 +395,7 @@ function ProviderPanel(props: WorkspaceProps) {
   }
 
   function exportProviders() {
-    const blob = new Blob([props.aiProvidersJson], { type: 'application/json;charset=utf-8' })
+    const blob = new Blob([buildProviderExportJson(props.aiProvidersJson)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -443,6 +443,7 @@ function ProviderPanel(props: WorkspaceProps) {
           }}
         />
         {!parsed.ok && <p className="empty-note danger">Provider JSON 无法解析：{parsed.message}</p>}
+        {parsed.ok && <p className="empty-note">API Key 保存到项目时会转为本地加密字段；导出 JSON 默认不包含密钥。</p>}
         {parsed.ok && (
           <>
             <div className="provider-coverage-grid">
@@ -666,6 +667,23 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
     model: typeof value.model === 'string' ? value.model : '',
     temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
     useCases,
+  }
+}
+
+function buildProviderExportJson(content: string) {
+  try {
+    const parsed = JSON.parse(content) as unknown
+    if (!Array.isArray(parsed)) return content
+    const sanitized = parsed.map((item) => {
+      if (!isRecord(item)) return item
+      const next = { ...item }
+      delete next.apiKey
+      delete next.apiKeyEncrypted
+      return { ...next, apiKey: '' }
+    })
+    return `${JSON.stringify(sanitized, null, 2)}\n`
+  } catch {
+    return content
   }
 }
 

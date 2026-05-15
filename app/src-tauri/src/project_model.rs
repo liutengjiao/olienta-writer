@@ -1158,7 +1158,8 @@ pub fn load_ai_providers(root_path: String) -> Result<ProjectFileDocument, Proje
     let root = PathBuf::from(root_path);
     let relative_path = ".olienta/ai-providers.json";
     let path = ensure_project_path(&root, relative_path)?;
-    let content = fs::read_to_string(path).unwrap_or_else(|_| "[]\n".to_owned());
+    let raw = fs::read_to_string(path).unwrap_or_else(|_| "[]\n".to_owned());
+    let content = decrypt_ai_providers_for_display(&root, &raw)?;
 
     Ok(ProjectFileDocument {
         relative_path: relative_path.to_owned(),
@@ -1170,7 +1171,8 @@ pub fn save_ai_providers(
     root_path: String,
     content: String,
 ) -> Result<ProjectFileDocument, ProjectError> {
-    let parsed: serde_json::Value = serde_json::from_str(&content)?;
+    let root = PathBuf::from(root_path);
+    let parsed = encrypt_ai_providers_for_storage(&root, &content)?;
     let provider_summaries = parsed
         .as_array()
         .map(|providers| {
@@ -1199,7 +1201,6 @@ pub fn save_ai_providers(
         })
         .count();
     let pretty = serde_json::to_string_pretty(&parsed)?;
-    let root = PathBuf::from(root_path);
     let relative_path = ".olienta/ai-providers.json";
     let path = ensure_project_path(&root, relative_path)?;
     atomic_write_text(&path, &(pretty + "\n"))?;
@@ -1216,7 +1217,7 @@ pub fn save_ai_providers(
 
     Ok(ProjectFileDocument {
         relative_path: relative_path.to_owned(),
-        content,
+        content: decrypt_ai_providers_for_display(&root, &serde_json::to_string_pretty(&parsed)?)?,
     })
 }
 
@@ -3744,6 +3745,175 @@ fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), Proje
     Ok(())
 }
 
+const PROVIDER_KEY_RELATIVE_PATH: &str = ".olienta/provider-secret.key";
+const PROVIDER_SECRET_PREFIX: &str = "olienta:v1:";
+
+fn encrypt_ai_providers_for_storage(
+    root: &Path,
+    content: &str,
+) -> Result<serde_json::Value, ProjectError> {
+    let mut parsed: serde_json::Value = serde_json::from_str(content)?;
+    let key = read_or_create_provider_secret(root)?;
+
+    if let Some(providers) = parsed.as_array_mut() {
+        for provider in providers {
+            let Some(object) = provider.as_object_mut() else {
+                continue;
+            };
+            let api_key = object
+                .get("apiKey")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            if api_key.is_empty() {
+                continue;
+            }
+            let encrypted = if api_key.starts_with(PROVIDER_SECRET_PREFIX) {
+                api_key
+            } else {
+                encrypt_provider_secret(&api_key, &key)
+            };
+            object.insert(
+                "apiKeyEncrypted".to_owned(),
+                serde_json::Value::String(encrypted),
+            );
+            object.remove("apiKey");
+        }
+    }
+
+    Ok(parsed)
+}
+
+fn decrypt_ai_providers_for_display(root: &Path, content: &str) -> Result<String, ProjectError> {
+    let mut parsed: serde_json::Value = match serde_json::from_str(content) {
+        Ok(value) => value,
+        Err(_) => {
+            return Ok(if content.ends_with('\n') {
+                content.to_owned()
+            } else {
+                format!("{content}\n")
+            });
+        }
+    };
+    let key = read_or_create_provider_secret(root)?;
+
+    if let Some(providers) = parsed.as_array_mut() {
+        for provider in providers {
+            let Some(object) = provider.as_object_mut() else {
+                continue;
+            };
+            let encrypted = object
+                .get("apiKeyEncrypted")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned);
+            if let Some(encrypted) = encrypted {
+                if let Some(decrypted) = decrypt_provider_secret(&encrypted, &key) {
+                    object.insert("apiKey".to_owned(), serde_json::Value::String(decrypted));
+                    object.remove("apiKeyEncrypted");
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::to_string_pretty(&parsed)? + "\n")
+}
+
+fn read_or_create_provider_secret(root: &Path) -> Result<Vec<u8>, ProjectError> {
+    let path = ensure_project_path(root, PROVIDER_KEY_RELATIVE_PATH)?;
+    if path.exists() {
+        let content = fs::read_to_string(&path)?;
+        if let Some(bytes) = decode_hex(content.trim()) {
+            if !bytes.is_empty() {
+                return Ok(bytes);
+            }
+        }
+    }
+
+    let seed = format!(
+        "{}:{}",
+        root.to_string_lossy(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let bytes = derive_provider_secret_bytes(&seed);
+    atomic_write_text(&path, &(encode_hex(&bytes) + "\n"))?;
+    Ok(bytes)
+}
+
+fn derive_provider_secret_bytes(seed: &str) -> Vec<u8> {
+    let seed_bytes = seed.as_bytes();
+    let mut bytes = vec![0_u8; 32];
+    for index in 0..bytes.len() {
+        let source = seed_bytes
+            .get(index % seed_bytes.len())
+            .copied()
+            .unwrap_or(0);
+        bytes[index] = source
+            .wrapping_add((index as u8).wrapping_mul(37))
+            .rotate_left((index % 8) as u32);
+    }
+    bytes
+}
+
+fn encrypt_provider_secret(value: &str, key: &[u8]) -> String {
+    let encrypted = xor_provider_secret(value.as_bytes(), key);
+    format!("{PROVIDER_SECRET_PREFIX}{}", encode_hex(&encrypted))
+}
+
+fn decrypt_provider_secret(value: &str, key: &[u8]) -> Option<String> {
+    let payload = value.strip_prefix(PROVIDER_SECRET_PREFIX)?;
+    let encrypted = decode_hex(payload)?;
+    let decrypted = xor_provider_secret(&encrypted, key);
+    String::from_utf8(decrypted).ok()
+}
+
+fn xor_provider_secret(input: &[u8], key: &[u8]) -> Vec<u8> {
+    input
+        .iter()
+        .enumerate()
+        .map(|(index, byte)| {
+            let key_byte = key.get(index % key.len()).copied().unwrap_or(0);
+            byte ^ key_byte ^ ((index as u8).wrapping_mul(31))
+        })
+        .collect()
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn decode_hex(value: &str) -> Option<Vec<u8>> {
+    if value.len() % 2 != 0 {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(value.len() / 2);
+    let chars = value.as_bytes();
+    for index in (0..chars.len()).step_by(2) {
+        let high = decode_hex_digit(chars[index])?;
+        let low = decode_hex_digit(chars[index + 1])?;
+        bytes.push((high << 4) | low);
+    }
+    Some(bytes)
+}
+
+fn decode_hex_digit(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
 fn select_provider_for_use_case(
     root: &Path,
     use_cases: &[&str],
@@ -3752,7 +3922,8 @@ fn select_provider_for_use_case(
     if raw.trim().is_empty() {
         return Ok(None);
     }
-    let providers: Vec<AiProviderConfig> = serde_json::from_str(&raw)?;
+    let display_json = decrypt_ai_providers_for_display(root, &raw)?;
+    let providers: Vec<AiProviderConfig> = serde_json::from_str(&display_json)?;
     Ok(providers.into_iter().find(|provider| {
         provider.enabled.unwrap_or(false)
             && provider
@@ -5688,6 +5859,41 @@ mod tests {
         assert!(select_provider_for_use_case(&root, &["facts"])
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn provider_save_encrypts_api_key_and_load_decrypts_for_editing() {
+        let (_temp, root) = create_temp_project(1);
+        let content = r#"[
+  {
+    "id": "secure",
+    "name": "Secure",
+    "kind": "openai-compatible",
+    "enabled": true,
+    "baseUrl": "https://example.invalid/v1",
+    "apiKey": "sk-secret-value",
+    "model": "secure-model",
+    "useCases": ["chapter"]
+  }
+]"#;
+
+        let saved =
+            save_ai_providers(root.to_string_lossy().to_string(), content.to_owned()).unwrap();
+        assert!(saved.content.contains("sk-secret-value"));
+
+        let stored = fs::read_to_string(root.join(".olienta/ai-providers.json")).unwrap();
+        assert!(!stored.contains("sk-secret-value"));
+        assert!(stored.contains("apiKeyEncrypted"));
+        assert!(root.join(".olienta/provider-secret.key").exists());
+
+        let loaded = load_ai_providers(root.to_string_lossy().to_string()).unwrap();
+        assert!(loaded.content.contains("\"apiKey\": \"sk-secret-value\""));
+        assert!(!loaded.content.contains("apiKeyEncrypted"));
+
+        let provider = select_provider_for_use_case(&root, &["chapter"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(provider.api_key.as_deref(), Some("sk-secret-value"));
     }
 
     #[test]

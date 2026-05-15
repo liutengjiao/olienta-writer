@@ -38,7 +38,7 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/KnowledgePanels.tsx',
-    includes: ['本地全文检索', '角色卡', '已确认事实', 'onSaveFrameworkFile', 'onChangeFrameworkContent'],
+    includes: ['本地全文检索', '角色卡', '已确认事实', '禁止违背', 'forbiddenRulesPath', 'onSaveFrameworkFile', 'onChangeFrameworkContent'],
   },
 ]
 

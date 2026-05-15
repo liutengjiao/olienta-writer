@@ -13,6 +13,8 @@ import type {
 } from '../types'
 import { errorToString } from '../utils'
 
+type KnowledgeFileKind = tauriApi.KnowledgeFileKind
+
 type UseProjectResourcesInput = {
   project: ProjectSummary | null
   setMessage: (message: string) => void
@@ -28,6 +30,8 @@ export function useProjectResources({
   const [confirmedFactsPath, setConfirmedFactsPath] = useState('facts/confirmed-facts.md')
   const [openLoops, setOpenLoops] = useState('# 未闭合伏笔\n\n')
   const [openLoopsPath, setOpenLoopsPath] = useState('facts/open-loops.md')
+  const [forbiddenRules, setForbiddenRules] = useState('# 禁止违背\n\n')
+  const [forbiddenRulesPath, setForbiddenRulesPath] = useState('facts/forbidden-rules.md')
   const [aiProvidersJson, setAiProvidersJson] = useState('[]\n')
   const [aiProvidersPath, setAiProvidersPath] = useState('.olienta/ai-providers.json')
   const [providerTestMessage, setProviderTestMessage] = useState('尚未测试')
@@ -56,20 +60,24 @@ export function useProjectResources({
     if (!isTauriRuntime) {
       setConfirmedFacts('# 已确认事实\n\n浏览器预览模式。')
       setOpenLoops('# 未闭合伏笔\n\n- 浏览器预览模式。')
+      setForbiddenRules('# 禁止违背\n\n- 浏览器预览模式。')
       return
     }
 
-    const [facts, loops] = await Promise.all([
+    const [facts, loops, forbidden] = await Promise.all([
       tauriApi.loadKnowledgeFile(rootPath, 'confirmed-facts'),
       tauriApi.loadKnowledgeFile(rootPath, 'open-loops'),
+      tauriApi.loadKnowledgeFile(rootPath, 'forbidden-rules'),
     ])
     setConfirmedFactsPath(facts.relative_path)
     setConfirmedFacts(facts.content)
     setOpenLoopsPath(loops.relative_path)
     setOpenLoops(loops.content)
+    setForbiddenRulesPath(forbidden.relative_path)
+    setForbiddenRules(forbidden.content)
   }
 
-  async function saveKnowledgeFile(kind: 'confirmed-facts' | 'open-loops') {
+  async function saveKnowledgeFile(kind: KnowledgeFileKind) {
     if (!project) {
       setMessage('请先创建或打开项目。')
       return
@@ -82,10 +90,17 @@ export function useProjectResources({
         return
       }
 
-      const content = kind === 'open-loops' ? openLoops : confirmedFacts
+      const content =
+        kind === 'open-loops'
+          ? openLoops
+          : kind === 'forbidden-rules'
+            ? forbiddenRules
+            : confirmedFacts
       const saved = await tauriApi.saveKnowledgeFile(project.root_path, kind, content)
       if (kind === 'open-loops') {
         setOpenLoopsPath(saved.relative_path)
+      } else if (kind === 'forbidden-rules') {
+        setForbiddenRulesPath(saved.relative_path)
       } else {
         setConfirmedFactsPath(saved.relative_path)
       }
@@ -650,6 +665,9 @@ export function useProjectResources({
     openLoops,
     setOpenLoops,
     openLoopsPath,
+    forbiddenRules,
+    setForbiddenRules,
+    forbiddenRulesPath,
     aiProvidersJson,
     setAiProvidersJson,
     aiProvidersPath,

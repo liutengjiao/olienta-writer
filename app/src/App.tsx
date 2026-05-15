@@ -91,6 +91,9 @@ function App() {
     openLoops,
     setOpenLoops,
     openLoopsPath,
+    forbiddenRules,
+    setForbiddenRules,
+    forbiddenRulesPath,
     aiProvidersJson,
     setAiProvidersJson,
     aiProvidersPath,
@@ -935,6 +938,8 @@ function App() {
         confirmedFactsPath={confirmedFactsPath}
         openLoops={openLoops}
         openLoopsPath={openLoopsPath}
+        forbiddenRules={forbiddenRules}
+        forbiddenRulesPath={forbiddenRulesPath}
         timelineEvents={timelineEvents}
         timelineEventsPath={timelineEventsPath}
         timelineSettings={timelineSettings}
@@ -996,6 +1001,7 @@ function App() {
         onSaveChapter={() => void saveChapterContent(manuscript)}
         onChangeConfirmedFacts={setConfirmedFacts}
         onChangeOpenLoops={setOpenLoops}
+        onChangeForbiddenRules={setForbiddenRules}
         onChangeTimelineEvents={setTimelineEvents}
         onSaveTimelineEvents={() => void saveTimelineEvents()}
         onSaveKnowledgeFile={(kind) => void saveKnowledgeFile(kind)}

@@ -77,6 +77,13 @@ export function KnowledgeFactsPanel(props: WorkspaceProps) {
         onChange={props.onChangeOpenLoops}
         onSave={() => props.onSaveKnowledgeFile('open-loops')}
       />
+      <MarkdownDocument
+        title="禁止违背"
+        path={props.forbiddenRulesPath}
+        value={props.forbiddenRules}
+        onChange={props.onChangeForbiddenRules}
+        onSave={() => props.onSaveKnowledgeFile('forbidden-rules')}
+      />
     </section>
   )
 }

@@ -174,13 +174,15 @@ export function exportManuscript(input: ExportInput) {
   return invoke<ProjectFileDocument>('export_manuscript', { input })
 }
 
-export function loadKnowledgeFile(rootPath: string, kind: 'confirmed-facts' | 'open-loops') {
+export type KnowledgeFileKind = 'confirmed-facts' | 'open-loops' | 'forbidden-rules'
+
+export function loadKnowledgeFile(rootPath: string, kind: KnowledgeFileKind) {
   return invoke<ProjectFileDocument>('load_knowledge_file', { rootPath, kind })
 }
 
 export function saveKnowledgeFile(
   rootPath: string,
-  kind: 'confirmed-facts' | 'open-loops',
+  kind: KnowledgeFileKind,
   content: string,
 ) {
   return invoke<ProjectFileDocument>('save_knowledge_file', { rootPath, kind, content })

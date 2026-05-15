@@ -3658,6 +3658,7 @@ fn extract_keywords_from_lines(lines: &[String]) -> Vec<String> {
 fn knowledge_relative_path(kind: &str) -> &'static str {
     match kind {
         "open-loops" => "facts/open-loops.md",
+        "forbidden-rules" => "facts/forbidden-rules.md",
         "author-confirmation" => "facts/author-confirmation.md",
         _ => "facts/confirmed-facts.md",
     }
@@ -5234,6 +5235,27 @@ mod tests {
             "# 绕过正文确认\n\n".to_owned(),
         );
         assert!(blocked.is_err());
+    }
+
+    #[test]
+    fn forbidden_rules_are_editable_knowledge_file() {
+        let (_temp, root) = create_temp_project(1);
+
+        let saved = save_knowledge_file(
+            root.to_string_lossy().to_string(),
+            "forbidden-rules".to_owned(),
+            "# 禁止违背\n\n- 不得否定作者确认正文。\n".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(saved.relative_path, "facts/forbidden-rules.md");
+
+        let loaded = load_knowledge_file(
+            root.to_string_lossy().to_string(),
+            "forbidden-rules".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(loaded.relative_path, "facts/forbidden-rules.md");
+        assert!(loaded.content.contains("不得否定作者确认正文"));
     }
 
     #[test]

@@ -55,6 +55,8 @@ export type WorkspaceProps = {
   confirmedFactsPath: string
   openLoops: string
   openLoopsPath: string
+  forbiddenRules: string
+  forbiddenRulesPath: string
   timelineEvents: string
   timelineEventsPath: string
   timelineSettings: TimelineSettings
@@ -88,9 +90,10 @@ export type WorkspaceProps = {
   onLoadCandidateHistory: (relativePath: string) => void
   onChangeConfirmedFacts: (content: string) => void
   onChangeOpenLoops: (content: string) => void
+  onChangeForbiddenRules: (content: string) => void
   onChangeTimelineEvents: (content: string) => void
   onSaveTimelineEvents: () => void
-  onSaveKnowledgeFile: (kind: 'confirmed-facts' | 'open-loops') => void
+  onSaveKnowledgeFile: (kind: 'confirmed-facts' | 'open-loops' | 'forbidden-rules') => void
   onRepairProjectStructure: () => void
   onRevealProjectFolder: () => void
   onRevealProjectPath: (relativePath: string) => void

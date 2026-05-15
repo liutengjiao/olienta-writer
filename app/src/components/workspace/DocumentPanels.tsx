@@ -64,7 +64,7 @@ export function SkillPanel(props: WorkspaceProps) {
                   checked={!file.disabled}
                   onChange={(event) => props.onSetSkillDisabled(file.name, !event.target.checked)}
                 />
-                Enabled
+                启用
               </label>
               <label>
                 <input
@@ -72,7 +72,7 @@ export function SkillPanel(props: WorkspaceProps) {
                   checked={file.temporary}
                   onChange={(event) => props.onSetTemporarySkill(file.name, event.target.checked)}
                 />
-                Temporary
+                临时
               </label>
             </div>
           </div>

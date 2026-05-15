@@ -97,25 +97,25 @@ export function CharactersPanel(props: WorkspaceProps) {
     <section className="character-workspace">
       <div className="character-profile-summary">
         <div>
-          <span>Character module</span>
+          <span>角色模块</span>
           <strong>{current.title}</strong>
           <small>{current.note}</small>
         </div>
         <dl>
           <div>
-            <dt>Card files</dt>
+            <dt>角色卡</dt>
             <dd>{cardFiles.length}</dd>
           </div>
           <div>
-            <dt>Source</dt>
+            <dt>来源</dt>
             <dd>framework/03-characters.md</dd>
           </div>
           <div>
-            <dt>Relations</dt>
+            <dt>关系</dt>
             <dd>{hasMarkdownFile(props.markdownFiles, 'characters/relations.md') ? '已就绪' : '缺失'}</dd>
           </div>
           <div>
-            <dt>Growth</dt>
+            <dt>成长线</dt>
             <dd>{hasMarkdownFile(props.markdownFiles, 'characters/growth.md') ? '已就绪' : '缺失'}</dd>
           </div>
         </dl>
@@ -152,7 +152,7 @@ export function CharactersPanel(props: WorkspaceProps) {
 
         <div className="character-card-detail">
           <MarkdownDocument
-            title={selectedPath === current.path ? current.title : 'Character File'}
+            title={selectedPath === current.path ? current.title : '角色文件'}
             path={selectedPath}
             value={selectedContent}
             onChange={props.onChangeMarkdownPreview}
@@ -391,24 +391,24 @@ function ProjectHealthPanel(props: WorkspaceProps) {
 
 const CHARACTER_DOCUMENTS: Record<string, { title: string; path: string; note: string }> = {
   'characters-overview': {
-    title: 'Character Overview',
+    title: '角色总览',
     path: 'framework/03-characters.md',
-    note: 'Source character map. Use this as the author-controlled source before extracting cards.',
+    note: '作者控制的角色源文件。先维护这里，再抽取独立角色卡。',
   },
   'characters-cards': {
-    title: 'Character Cards',
+    title: '角色卡',
     path: 'characters/cards/INDEX.md',
     note: '生成索引和独立角色卡，保存在 characters/cards 下。',
   },
   'characters-relations': {
-    title: 'Relationship Map',
+    title: '关系图谱',
     path: 'characters/relations.md',
     note: '从角色材料中整理关系、欲望、利益和冲突。',
   },
   'characters-growth': {
-    title: 'Growth Line',
+    title: '成长线',
     path: 'characters/growth.md',
-    note: '记录角色状态变化和对应章节位置。',
+    note: '记录角色状态、变化和对应章节位置。',
   },
 }
 

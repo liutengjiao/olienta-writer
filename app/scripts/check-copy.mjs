@@ -16,7 +16,7 @@ const ignoredParts = new Set([
   'app/src/sample',
 ])
 
-const mojibakePattern = /�|璇|娌|鍚|鐨|鍊|鏄|鐗|璁|灏|绗|鍥|妯|閰|鐢|鍙|宸|浣|鏈|鏃|閲|鍊欓|瑙掕壊|鐭ヨ瘑|浣滆€|椤圭洰|绔犺妭|姝ｆ枃/
+const mojibakePattern = /�|璇|娌|鍚|鐨|鍊|鏄|鐗|璁|灏|绗|鍥|妯|閰|鐢|鍙|宸|浣|鏈|鏃|閲|鍊欓|寰呭啓|鏆傛棤|鑷姩|鎶藉彇|鍐呭|鍙互|鎵嬪姩|瑙掕壊|鐭ヨ瘑|浣滆€|椤圭洰|绔犺妭|姝ｆ枃/
 
 function hasAllowedExtension(path) {
   return Array.from(extensions).some((extension) => path.endsWith(extension))

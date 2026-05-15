@@ -214,12 +214,12 @@ struct ModelCallLog<'a> {
 }
 
 const CLASSIFIED_FACT_FILES: &[(&str, &str)] = &[
-    ("facts/character-facts.md", "Character Facts"),
-    ("facts/time-facts.md", "Time Facts"),
-    ("facts/location-facts.md", "Location Facts"),
-    ("facts/relation-facts.md", "Relation Facts"),
-    ("facts/world-rules.md", "World Rules"),
-    ("facts/event-facts.md", "Event Facts"),
+    ("facts/character-facts.md", "角色事实"),
+    ("facts/time-facts.md", "时间事实"),
+    ("facts/location-facts.md", "地点事实"),
+    ("facts/relation-facts.md", "关系事实"),
+    ("facts/world-rules.md", "世界规则"),
+    ("facts/event-facts.md", "事件事实"),
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -331,7 +331,7 @@ pub fn list_chapters(root_path: String) -> Result<Vec<ChapterSummary>, ProjectEr
                 format!("第{number}章 未命名")
             });
             let state = if is_placeholder_or_empty(&content) {
-                "寰呭啓".to_owned()
+                "待写".to_owned()
             } else {
                 "已确认".to_owned()
             };
@@ -3321,7 +3321,7 @@ fn write_classified_fact_files(root: &Path, facts: &[String]) -> Result<(), Proj
             .collect();
         let mut content = format!("# {title}\n\n");
         if matched.is_empty() {
-            content.push_str("鏆傛棤鑷姩鎶藉彇鍐呭銆備綔鑰呭彲浠ユ墜鍔ㄨˉ鍏呫€俓n");
+            content.push_str("暂无自动抽取内容。作者可以手动补充。\n");
         } else {
             for fact in matched {
                 content.push_str(fact);
@@ -4908,6 +4908,9 @@ mod tests {
         assert!(root.join("manuscript/chapters/001.md").exists());
         assert!(root.join("facts/confirmed-facts.md").exists());
         assert!(root.join(".olienta/ai-providers.json").exists());
+
+        let chapters = list_chapters(root.to_string_lossy().to_string()).unwrap();
+        assert_eq!(chapters[0].state, "待写");
     }
 
     #[test]
@@ -4972,6 +4975,11 @@ mod tests {
         assert!(fs::read_to_string(root.join("facts/author-confirmation.md"))
             .unwrap()
             .contains("001"));
+        let time_facts = fs::read_to_string(root.join("facts/time-facts.md")).unwrap();
+        assert!(time_facts.contains("# 时间事实"));
+        let location_facts = fs::read_to_string(root.join("facts/location-facts.md")).unwrap();
+        assert!(location_facts.contains("# 地点事实"));
+        assert!(location_facts.contains("暂无自动抽取内容。作者可以手动补充。"));
         assert!(fs::read_to_string(root.join("logs/system-events.jsonl"))
             .unwrap()
             .contains("chapter_saved"));

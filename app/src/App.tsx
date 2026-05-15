@@ -382,6 +382,16 @@ function App() {
   }
 
   function loadDefaultModuleDocument(view: ModuleSubViewKey) {
+    if (view === 'characters-overview') {
+      if (project) {
+        void loadFrameworkFile(project.root_path, '03-characters.md')
+      } else {
+        setSelectedFrameworkFile('03-characters.md')
+        setFrameworkContent(previewByFrameworkFile['03-characters.md'])
+      }
+      return
+    }
+
     const path = defaultMarkdownByModuleView[view]
     if (!project || !path) return
     void loadMarkdownFile(project.root_path, path)

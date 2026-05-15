@@ -83,6 +83,11 @@ export function KnowledgeFactsPanel(props: WorkspaceProps) {
 
 export function CharactersPanel(props: WorkspaceProps) {
   const current = CHARACTER_DOCUMENTS[props.activeModuleView] ?? CHARACTER_DOCUMENTS['characters-overview']
+  const isOverview = props.activeModuleView === 'characters-overview'
+  const selectedCharacterPath = props.selectedMarkdownPath.startsWith('characters/')
+    ? props.selectedMarkdownPath
+    : ''
+  const editingOverviewSource = isOverview && !selectedCharacterPath
   const characterFiles = props.markdownFiles.filter((file) =>
     file.relative_path === 'framework/03-characters.md' ||
     file.relative_path.startsWith('characters/'),
@@ -90,8 +95,8 @@ export function CharactersPanel(props: WorkspaceProps) {
   const cardFiles = characterFiles.filter((file) =>
     file.relative_path.startsWith('characters/cards/') && !file.relative_path.endsWith('/README.md'),
   )
-  const selectedPath = props.selectedMarkdownPath || current.path
-  const selectedContent = props.markdownPreview || ''
+  const selectedPath = editingOverviewSource ? props.frameworkPath : props.selectedMarkdownPath || current.path
+  const selectedContent = editingOverviewSource ? props.frameworkContent : props.markdownPreview || ''
 
   return (
     <section className="character-workspace">
@@ -155,8 +160,12 @@ export function CharactersPanel(props: WorkspaceProps) {
             title={selectedPath === current.path ? current.title : '角色文件'}
             path={selectedPath}
             value={selectedContent}
-            onChange={props.onChangeMarkdownPreview}
-            onSave={() => selectedPath && props.onSaveModuleMarkdownFile(selectedPath, selectedContent)}
+            onChange={editingOverviewSource ? props.onChangeFrameworkContent : props.onChangeMarkdownPreview}
+            onSave={() =>
+              editingOverviewSource
+                ? props.onSaveFrameworkFile()
+                : selectedPath && props.onSaveModuleMarkdownFile(selectedPath, selectedContent)
+            }
           />
         </div>
       </section>

@@ -3409,12 +3409,16 @@ fn select_chapter_provider(root: &Path) -> Result<Option<AiProviderConfig>, Proj
 }
 
 fn provider_label(provider: &AiProviderConfig) -> String {
-    provider
+    let name = provider
         .name
         .as_deref()
         .or(provider.id.as_deref())
         .unwrap_or("provider")
-        .to_owned()
+        .to_owned();
+    match provider.model.as_deref().filter(|value| !value.trim().is_empty()) {
+        Some(model) => format!("{name} ({model})"),
+        None => name,
+    }
 }
 
 fn call_openai_compatible(provider: &AiProviderConfig, prompt: &str) -> Result<String, String> {
@@ -3423,13 +3427,31 @@ fn call_openai_compatible(provider: &AiProviderConfig, prompt: &str) -> Result<S
 
 fn call_openai_compatible_with_system(
     provider: &AiProviderConfig,
-    _system: &str,
+    system: &str,
     prompt: &str,
 ) -> Result<String, String> {
     if provider.api_key.as_deref().unwrap_or("").trim().is_empty() {
         return Err("provider api key is empty".to_owned());
     }
-    Ok(format!("Local placeholder response for prompt: {}", prompt.trim()))
+
+    let kind = provider.kind.as_deref().unwrap_or("OpenAI-compatible");
+    let base_url = provider
+        .base_url
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("https://api.openai.com/v1");
+    let model = provider
+        .model
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("unspecified-model");
+    let temperature = provider.temperature.unwrap_or(0.7);
+
+    Ok(format!(
+        "Local placeholder response via {kind} {base_url} {model} temp={temperature:.2}; system={}; prompt={}",
+        trim_for_status(system),
+        prompt.trim()
+    ))
 }
 
 fn generate_candidate_content(
@@ -3851,22 +3873,6 @@ fn character_names_from_context(character_context: &str) -> Vec<String> {
     names.sort();
     names.dedup();
     names
-}
-
-fn extract_markdown_section(content: &str, headings: &[&str]) -> String {
-    let mut matched = false;
-    let mut output = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') {
-            matched = headings.iter().any(|heading| trimmed.contains(heading));
-            continue;
-        }
-        if matched {
-            output.push(trimmed.to_owned());
-        }
-    }
-    output.join("\n")
 }
 
 fn constraint_lines(content: &str) -> Vec<String> {

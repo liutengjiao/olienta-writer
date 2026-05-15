@@ -29,6 +29,10 @@ const sourceContracts = [
     ],
   },
   {
+    path: '/src/components/workspace/EditorPanels.tsx',
+    includes: ['候选稿与正文对比', '候选稿新增段落', '正文独有段落', 'compareParagraphs', 'DiffPreviewList'],
+  },
+  {
     path: '/src/components/workspace/DocumentPanels.tsx',
     includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '导出', '选中章节', 'exportSelected', '模型调用'],
   },

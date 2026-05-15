@@ -24,6 +24,7 @@ export function DraftPanel(props: WorkspaceProps) {
   const manuscriptUnits = estimateTextUnits(props.manuscript)
   const candidateParagraphs = countParagraphs(props.candidate)
   const manuscriptParagraphs = countParagraphs(props.manuscript)
+  const candidateDiff = compareParagraphs(props.candidate, props.manuscript)
   const reviewGroups = groupCandidateWarnings(props.candidateWarnings)
 
   return (
@@ -74,7 +75,7 @@ export function DraftPanel(props: WorkspaceProps) {
           <div className="card-heading">
             <div>
               <h2>候选稿与正文对比</h2>
-              <p>采用前的轻量审查统计。</p>
+              <p>采用前检查候选稿新增段落和正文独有段落。</p>
             </div>
             <span className="status-pill">{props.candidateReviewPath}</span>
           </div>
@@ -83,6 +84,31 @@ export function DraftPanel(props: WorkspaceProps) {
             <article><span>正文单位数</span><strong>{manuscriptUnits}</strong></article>
             <article><span>段落差值</span><strong>{candidateParagraphs - manuscriptParagraphs}</strong></article>
           </div>
+          <div className="diff-columns">
+            <article className="diff-column added">
+              <div className="candidate-review-group-head">
+                <strong>候选稿新增段落</strong>
+                <span>{candidateDiff.candidateOnly.length}</span>
+              </div>
+              <DiffPreviewList
+                items={candidateDiff.candidateOnly}
+                emptyText="没有发现候选稿相对正文的新增段落。"
+              />
+            </article>
+            <article className="diff-column removed">
+              <div className="candidate-review-group-head">
+                <strong>正文独有段落</strong>
+                <span>{candidateDiff.manuscriptOnly.length}</span>
+              </div>
+              <DiffPreviewList
+                items={candidateDiff.manuscriptOnly}
+                emptyText="没有发现正文相对候选稿独有的段落。"
+              />
+            </article>
+          </div>
+          <p className="diff-summary">
+            共同段落 {candidateDiff.sharedCount} 个。段落对比按规范化后的完整段落匹配，适合采用前快速判断追加或替换风险。
+          </p>
         </section>
 
         {props.candidateWarnings.length > 0 && (
@@ -322,6 +348,26 @@ function groupCandidateWarnings(warnings: string[]): ReviewGroup[] {
     .map(({ key, title, tone, items }) => ({ key, title, tone, items }))
 }
 
+function DiffPreviewList(props: { items: string[]; emptyText: string }) {
+  if (props.items.length === 0) {
+    return <p className="empty-note">{props.emptyText}</p>
+  }
+
+  const previewItems = props.items.slice(0, 6)
+  const hiddenCount = props.items.length - previewItems.length
+
+  return (
+    <>
+      <ul>
+        {previewItems.map((item) => (
+          <li key={item}>{trimDiffParagraph(item)}</li>
+        ))}
+      </ul>
+      {hiddenCount > 0 && <p className="diff-more">还有 {hiddenCount} 个段落未展开。</p>}
+    </>
+  )
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   return `${Math.round(bytes / 1024)} KB`
@@ -340,4 +386,44 @@ function countParagraphs(content: string) {
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean).length
+}
+
+function compareParagraphs(candidate: string, manuscript: string) {
+  const candidateParagraphs = toComparableParagraphs(candidate)
+  const manuscriptParagraphs = toComparableParagraphs(manuscript)
+  const manuscriptSet = new Set(manuscriptParagraphs.map((item) => item.normalized))
+  const candidateSet = new Set(candidateParagraphs.map((item) => item.normalized))
+
+  return {
+    candidateOnly: candidateParagraphs
+      .filter((item) => !manuscriptSet.has(item.normalized))
+      .map((item) => item.original),
+    manuscriptOnly: manuscriptParagraphs
+      .filter((item) => !candidateSet.has(item.normalized))
+      .map((item) => item.original),
+    sharedCount: candidateParagraphs.filter((item) => manuscriptSet.has(item.normalized)).length,
+  }
+}
+
+function toComparableParagraphs(content: string) {
+  const seen = new Set<string>()
+  return content
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => ({
+      original: paragraph,
+      normalized: paragraph.replace(/\s+/g, ' ').trim(),
+    }))
+    .filter((paragraph) => {
+      if (seen.has(paragraph.normalized)) return false
+      seen.add(paragraph.normalized)
+      return true
+    })
+}
+
+function trimDiffParagraph(paragraph: string) {
+  const compact = paragraph.replace(/\s+/g, ' ').trim()
+  if (compact.length <= 140) return compact
+  return `${compact.slice(0, 140)}...`
 }

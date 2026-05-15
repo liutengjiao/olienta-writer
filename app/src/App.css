@@ -1687,6 +1687,18 @@ button:disabled {
   line-height: 1.55;
 }
 
+.diff-column li {
+  overflow-wrap: anywhere;
+}
+
+.diff-summary,
+.diff-more {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .candidate-review-groups {
   display: grid;
   gap: 12px;

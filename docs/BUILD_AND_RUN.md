@@ -23,6 +23,24 @@ npm install
 npm run build
 ```
 
+## Copy Check
+
+```powershell
+cd D:\windsurf\olienta\app
+npm run check:copy
+```
+
+The copy check scans source and documentation files for common mojibake markers before build verification.
+
+## Full Verification
+
+```powershell
+cd D:\windsurf\olienta\app
+npm run verify
+```
+
+`npm run verify` runs the copy check, frontend build, lint, dev server smoke check, and Rust tests.
+
 ## Rust Check
 
 ```powershell

@@ -8,6 +8,7 @@ const tauriDir = resolve(appDir, 'src-tauri')
 const smokeUrl = process.env.OLIENTA_SMOKE_URL ?? 'http://localhost:1420'
 
 const steps = [
+  { label: 'copy check', command: 'npm', args: ['run', 'check:copy'], cwd: appDir },
   { label: 'frontend build', command: 'npm', args: ['run', 'build'], cwd: appDir },
   { label: 'frontend lint', command: 'npm', args: ['run', 'lint'], cwd: appDir },
   { label: 'dev server smoke', command: 'npm', args: ['run', 'smoke:dev'], cwd: appDir, needsDevServer: true },

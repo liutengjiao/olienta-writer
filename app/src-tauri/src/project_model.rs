@@ -586,7 +586,7 @@ pub fn regenerate_all_blueprints(root_path: String) -> Result<ProjectFileDocumen
         overwritten.push(id);
     }
 
-    write_blueprint_cascade_log(&root, "鍏ㄩ儴绔犺妭", &overwritten)?;
+    write_blueprint_cascade_log(&root, "全部章节", &overwritten)?;
     load_blueprint(root.to_string_lossy().to_string(), "001".to_owned())
 }
 
@@ -1047,7 +1047,7 @@ pub fn export_manuscript(input: ExportInput) -> Result<ProjectFileDocument, Proj
             .or_else(|| input.chapter_id.map(|id| vec![id]))
             .unwrap_or_else(|| vec!["001".to_owned()]);
         let chapters = list_chapters(root.to_string_lossy().to_string())?;
-        let mut manuscript = format!("# {} 閫変腑绔犺妭\n\n", summary.name);
+        let mut manuscript = format!("# {} 选中章节\n\n", summary.name);
         for chapter in chapters
             .into_iter()
             .filter(|chapter| selected_ids.iter().any(|id| id == &chapter.id))
@@ -4837,7 +4837,7 @@ fn is_placeholder_or_empty(content: &str) -> bool {
         .trim()
         .to_owned();
 
-    body.is_empty() || body.contains("姝ｆ枃寰呭啓")
+    body.is_empty() || body.contains("正文待写")
 }
 
 fn extract_title(content: &str) -> Option<String> {

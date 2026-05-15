@@ -2,7 +2,7 @@ import { useState } from 'react'
 import * as tauriApi from '../../api/tauriApi'
 import { isTauriRuntime } from '../../constants'
 import type { MarkdownFileSummary, PinnedContextItem, ProjectSearchResult } from '../../types'
-import type { WorkspaceProps } from '../Workspace'
+import type { WorkspaceProps } from './types'
 import { LocalFilesPanel, SkillPanel } from './DocumentPanels'
 import { MarkdownDocument } from './EditorPanels'
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { WorkspaceProps } from '../Workspace'
+import type { WorkspaceProps } from './types'
 
 export function DraftPanel(props: WorkspaceProps) {
   const candidateUnits = estimateTextUnits(props.candidate)

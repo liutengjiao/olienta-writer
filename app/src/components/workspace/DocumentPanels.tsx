@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
-import type { WorkspaceProps } from '../Workspace'
+import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 
 export function LocalFilesPanel(props: WorkspaceProps) {

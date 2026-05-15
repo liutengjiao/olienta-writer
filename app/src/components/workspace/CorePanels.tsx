@@ -1,23 +1,6 @@
 import type { ReactNode } from 'react'
-import type { WorkspaceProps } from '../Workspace'
+import { VIEW_TITLES, type WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
-
-const VIEW_TITLES: Record<string, string> = {
-  'novel-settings': '小说设置',
-  'story-premise': '故事前提',
-  characters: '角色图谱',
-  world: '世界观',
-  'plot-outline': '情节大纲',
-  timeline: '时间线及里程碑',
-  'chapter-blueprint': '章节蓝图',
-  'draft-box': '草稿箱',
-  manuscript: '正文',
-  facts: '事实库',
-  skills: 'Skills',
-  'ai-providers': 'AI Provider',
-  exports: '导出',
-  'local-files': '本地 Markdown',
-}
 
 const FRAMEWORK_PATHS: Record<string, string> = {
   'story-premise': 'framework/02-premise.md',

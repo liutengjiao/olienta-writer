@@ -4488,8 +4488,10 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
     write_if_missing(root, "framework/01-setting.md", "# 小说设置\n\n")?;
     write_if_missing(root, "framework/02-premise.md", "# 故事前提\n\n")?;
     write_if_missing(root, "framework/03-characters.md", "# 角色图谱\n\n")?;
-    write_if_missing(root, "framework/04-world.md", "# 世界观\n\n")?;
-    write_if_missing(root, "framework/05-plot.md", "# 情节大纲\n\n")?;
+    migrate_legacy_framework_file(root, "framework/05-plot.md", "framework/04-plot-outline.md")?;
+    migrate_legacy_framework_file(root, "framework/04-world.md", "framework/05-world.md")?;
+    write_if_missing(root, "framework/04-plot-outline.md", "# 情节大纲\n\n")?;
+    write_if_missing(root, "framework/05-world.md", "# 世界观\n\n")?;
     write_if_missing(root, "framework/06-style.md", "# 文风配置\n\n")?;
     write_if_missing(root, "facts/confirmed-facts.md", "# 已确认事实\n\n")?;
     write_if_missing(root, "facts/author-confirmation.md", "# 作者确认边界\n\n")?;
@@ -4770,6 +4772,20 @@ fn write_if_missing(root: &Path, relative_path: &str, content: &str) -> Result<(
     Ok(())
 }
 
+fn migrate_legacy_framework_file(
+    root: &Path,
+    legacy_relative_path: &str,
+    current_relative_path: &str,
+) -> Result<(), ProjectError> {
+    let legacy = ensure_project_path(root, legacy_relative_path)?;
+    let current = ensure_project_path(root, current_relative_path)?;
+    if legacy.exists() && !current.exists() {
+        let content = fs::read_to_string(legacy)?;
+        atomic_write_text(&current, &content)?;
+    }
+    Ok(())
+}
+
 fn read_summary(root: &Path) -> Result<ProjectSummary, ProjectError> {
     let project = read_project_yaml(root)?;
     Ok(ProjectSummary {
@@ -4906,6 +4922,10 @@ mod tests {
 
         assert!(root.join("framework/02-premise.md").exists());
         assert!(root.join("framework/03-characters.md").exists());
+        assert!(root.join("framework/04-plot-outline.md").exists());
+        assert!(root.join("framework/05-world.md").exists());
+        assert!(!root.join("framework/04-world.md").exists());
+        assert!(!root.join("framework/05-plot.md").exists());
         assert!(root.join("blueprints/chapters/001.md").exists());
         assert!(root.join("manuscript/drafts/001.md").exists());
         assert!(root.join("manuscript/chapters/001.md").exists());
@@ -4914,6 +4934,24 @@ mod tests {
 
         let chapters = list_chapters(root.to_string_lossy().to_string()).unwrap();
         assert_eq!(chapters[0].state, "待写");
+    }
+
+    #[test]
+    fn open_project_migrates_legacy_framework_file_names() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("legacy-novel");
+        fs::create_dir_all(root.join("framework")).unwrap();
+        fs::write(root.join("framework/04-world.md"), "# 旧世界观\n\n保留世界设定。").unwrap();
+        fs::write(root.join("framework/05-plot.md"), "# 旧情节大纲\n\n保留情节设计。").unwrap();
+
+        open_project(root.to_string_lossy().to_string()).unwrap();
+
+        assert!(fs::read_to_string(root.join("framework/04-plot-outline.md"))
+            .unwrap()
+            .contains("保留情节设计"));
+        assert!(fs::read_to_string(root.join("framework/05-world.md"))
+            .unwrap()
+            .contains("保留世界设定"));
     }
 
     #[test]

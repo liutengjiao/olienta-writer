@@ -72,11 +72,11 @@ blueprints/
 
 ```text
 framework/
-  01-settings.md
+  01-setting.md
   02-premise.md
   03-characters.md
-  04-world.md
-  05-plot.md
+  04-plot-outline.md
+  05-world.md
   06-style.md
 ```
 

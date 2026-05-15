@@ -8,6 +8,13 @@ type ReviewGroup = {
   items: string[]
 }
 
+type InlineDiffChunk = {
+  type: 'equal' | 'added' | 'removed'
+  text: string
+}
+
+const INLINE_DIFF_TOKEN_LIMIT = 900
+
 const REVIEW_GROUPS: Array<Omit<ReviewGroup, 'items'> & { match: (warning: string) => boolean }> = [
   { key: 'timeline', title: '时间线与里程碑', tone: 'danger', match: (warning) => warning.includes('时间线') || warning.includes('里程碑') || warning.includes('提前触发') },
   { key: 'blueprint', title: '章节蓝图', tone: 'danger', match: (warning) => warning.includes('蓝图') || warning.includes('本章必须') || warning.includes('禁区') },
@@ -25,6 +32,7 @@ export function DraftPanel(props: WorkspaceProps) {
   const candidateParagraphs = countParagraphs(props.candidate)
   const manuscriptParagraphs = countParagraphs(props.manuscript)
   const candidateDiff = compareParagraphs(props.candidate, props.manuscript)
+  const inlineDiff = compareInlineDiff(props.candidate, props.manuscript)
   const reviewGroups = groupCandidateWarnings(props.candidateWarnings)
 
   return (
@@ -109,6 +117,29 @@ export function DraftPanel(props: WorkspaceProps) {
           <p className="diff-summary">
             共同段落 {candidateDiff.sharedCount} 个。段落对比按规范化后的完整段落匹配，适合采用前快速判断追加或替换风险。
           </p>
+          <section className="inline-diff-card">
+            <div className="candidate-review-group-head">
+              <strong>逐字差异预览</strong>
+              <span>{inlineDiff.truncated ? '已截断' : '完整'}</span>
+            </div>
+            <div className="inline-diff-stats">
+              <span>新增 {inlineDiff.addedUnits}</span>
+              <span>删减 {inlineDiff.removedUnits}</span>
+              <span>相同 {inlineDiff.equalUnits}</span>
+            </div>
+            <p className="inline-diff-preview">
+              {inlineDiff.chunks.length === 0
+                ? '候选稿和正文暂无可对比内容。'
+                : inlineDiff.chunks.map((chunk, index) => (
+                  <span className={`inline-diff-token ${chunk.type}`} key={`${chunk.type}-${index}-${chunk.text}`}>
+                    {chunk.text}
+                  </span>
+                ))}
+            </p>
+            {inlineDiff.truncated && (
+              <p className="diff-more">逐字差异只预览前 {INLINE_DIFF_TOKEN_LIMIT} 个字词单位，长章节仍以段落对比和审查报告为主。</p>
+            )}
+          </section>
         </section>
 
         {props.candidateWarnings.length > 0 && (
@@ -760,6 +791,105 @@ function compareParagraphs(candidate: string, manuscript: string) {
       .map((item) => item.original),
     sharedCount: candidateParagraphs.filter((item) => manuscriptSet.has(item.normalized)).length,
   }
+}
+
+function compareInlineDiff(candidate: string, manuscript: string) {
+  const candidateTokens = tokenizeInlineDiff(candidate).slice(0, INLINE_DIFF_TOKEN_LIMIT)
+  const manuscriptTokens = tokenizeInlineDiff(manuscript).slice(0, INLINE_DIFF_TOKEN_LIMIT)
+  const truncated =
+    tokenizeInlineDiff(candidate).length > INLINE_DIFF_TOKEN_LIMIT ||
+    tokenizeInlineDiff(manuscript).length > INLINE_DIFF_TOKEN_LIMIT
+  const chunks = mergeInlineDiffChunks(diffTokens(manuscriptTokens, candidateTokens))
+  return {
+    chunks: trimInlineDiffChunks(chunks),
+    addedUnits: chunks.filter((chunk) => chunk.type === 'added').reduce((sum, chunk) => sum + diffUnitCount(chunk.text), 0),
+    removedUnits: chunks.filter((chunk) => chunk.type === 'removed').reduce((sum, chunk) => sum + diffUnitCount(chunk.text), 0),
+    equalUnits: chunks.filter((chunk) => chunk.type === 'equal').reduce((sum, chunk) => sum + diffUnitCount(chunk.text), 0),
+    truncated,
+  }
+}
+
+function tokenizeInlineDiff(content: string) {
+  return content
+    .replace(/[#>*_`-]+/g, ' ')
+    .match(/[\u3400-\u9fff]|[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*|[^\s]/g) ?? []
+}
+
+function diffTokens(baseTokens: string[], nextTokens: string[]): InlineDiffChunk[] {
+  const rows = baseTokens.length + 1
+  const cols = nextTokens.length + 1
+  const table = Array.from({ length: rows }, () => Array(cols).fill(0) as number[])
+
+  for (let row = baseTokens.length - 1; row >= 0; row -= 1) {
+    for (let col = nextTokens.length - 1; col >= 0; col -= 1) {
+      table[row][col] = baseTokens[row] === nextTokens[col]
+        ? table[row + 1][col + 1] + 1
+        : Math.max(table[row + 1][col], table[row][col + 1])
+    }
+  }
+
+  const chunks: InlineDiffChunk[] = []
+  let row = 0
+  let col = 0
+  while (row < baseTokens.length && col < nextTokens.length) {
+    if (baseTokens[row] === nextTokens[col]) {
+      chunks.push({ type: 'equal', text: baseTokens[row] })
+      row += 1
+      col += 1
+    } else if (table[row + 1][col] >= table[row][col + 1]) {
+      chunks.push({ type: 'removed', text: baseTokens[row] })
+      row += 1
+    } else {
+      chunks.push({ type: 'added', text: nextTokens[col] })
+      col += 1
+    }
+  }
+  while (row < baseTokens.length) {
+    chunks.push({ type: 'removed', text: baseTokens[row] })
+    row += 1
+  }
+  while (col < nextTokens.length) {
+    chunks.push({ type: 'added', text: nextTokens[col] })
+    col += 1
+  }
+  return chunks
+}
+
+function mergeInlineDiffChunks(chunks: InlineDiffChunk[]) {
+  const merged: InlineDiffChunk[] = []
+  for (const chunk of chunks) {
+    const last = merged[merged.length - 1]
+    if (last?.type === chunk.type) {
+      last.text = joinDiffTokenText(last.text, chunk.text)
+    } else {
+      merged.push({ ...chunk })
+    }
+  }
+  return merged
+}
+
+function trimInlineDiffChunks(chunks: InlineDiffChunk[]) {
+  const importantIndexes = chunks
+    .map((chunk, index) => chunk.type === 'equal' ? -1 : index)
+    .filter((index) => index >= 0)
+  if (importantIndexes.length === 0) return chunks.slice(0, 1)
+  const start = Math.max(0, importantIndexes[0] - 2)
+  const end = Math.min(chunks.length, importantIndexes[importantIndexes.length - 1] + 3)
+  const output = chunks.slice(start, end)
+  if (start > 0) output.unshift({ type: 'equal', text: '...' })
+  if (end < chunks.length) output.push({ type: 'equal', text: '...' })
+  return output
+}
+
+function joinDiffTokenText(left: string, right: string) {
+  if (left === '...' || right === '...') return `${left}${right}`
+  if (/^[\u3400-\u9fff]$/.test(right) || /^[,.;:!?，。；：！？、）】》]$/.test(right)) return `${left}${right}`
+  if (/^[（【《]$/.test(right)) return `${left}${right}`
+  return `${left} ${right}`
+}
+
+function diffUnitCount(text: string) {
+  return tokenizeInlineDiff(text).length
 }
 
 function toComparableParagraphs(content: string) {

@@ -5043,6 +5043,99 @@ mod tests {
     }
 
     #[test]
+    fn search_scope_batch_pin_and_remove_recompose_writing_brief() {
+        let (_temp, root) = create_temp_project(1);
+
+        fs::create_dir_all(root.join("knowledge/markdown/imported")).unwrap();
+        fs::write(
+            root.join("knowledge/markdown/imported/source-a.md"),
+            "# 资料 A\n\n雨夜收据显示第一笔转账发生在凌晨。\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("framework/02-premise.md"),
+            "# 故事前提\n\n雨夜收据不是公开线索，而是私密证据。\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("manuscript/chapters/001.md"),
+            "# 第一章\n\n正文里暂时没有那张雨夜收据。\n",
+        )
+        .unwrap();
+
+        let imported_results = search_project_text_files_scoped(
+            root.to_string_lossy().to_string(),
+            "雨夜收据".to_owned(),
+            "imported".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(imported_results.len(), 1);
+        assert_eq!(
+            imported_results[0].relative_path,
+            "knowledge/markdown/imported/source-a.md"
+        );
+
+        let framework_results = search_project_text_files_scoped(
+            root.to_string_lossy().to_string(),
+            "雨夜收据".to_owned(),
+            "framework".to_owned(),
+        )
+        .unwrap();
+        assert!(framework_results
+            .iter()
+            .any(|result| result.relative_path == "framework/02-premise.md"));
+
+        let manuscript_results = search_project_text_files_scoped(
+            root.to_string_lossy().to_string(),
+            "雨夜收据".to_owned(),
+            "manuscript".to_owned(),
+        )
+        .unwrap();
+        assert!(manuscript_results
+            .iter()
+            .any(|result| result.relative_path == "manuscript/chapters/001.md"));
+
+        let brief = pin_search_results_to_writing_brief(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            vec![
+                PinSearchResultInput {
+                    source_path: imported_results[0].relative_path.clone(),
+                    line_number: imported_results[0].line_number,
+                    snippet: imported_results[0].snippet.clone(),
+                },
+                PinSearchResultInput {
+                    source_path: framework_results[0].relative_path.clone(),
+                    line_number: framework_results[0].line_number,
+                    snippet: framework_results[0].snippet.clone(),
+                },
+            ],
+        )
+        .unwrap();
+        assert!(brief.content.contains("Pinned Search Context"));
+        assert!(brief.content.contains("source-a.md"));
+
+        let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        assert_eq!(pinned.len(), 2);
+
+        let recomposed = remove_pinned_context_item(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            0,
+        )
+        .unwrap();
+        let pinned_after_remove =
+            list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        assert_eq!(pinned_after_remove.len(), 1);
+        assert!(!recomposed.content.contains("source-a.md"));
+        assert!(recomposed.content.contains(&pinned_after_remove[0].snippet));
+
+        let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
+        assert!(task_history.contains("search_results_pinned_to_brief"));
+        assert!(task_history.contains("pinned_context_removed"));
+    }
+
+    #[test]
     fn blueprint_draft_generation_does_not_save_file() {
         let (_temp, root) = create_temp_project(2);
         let before = fs::read_to_string(root.join("blueprints/chapters/001.md")).unwrap();

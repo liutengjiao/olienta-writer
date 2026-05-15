@@ -303,12 +303,71 @@ function ProviderPanel(props: WorkspaceProps) {
 }
 
 function ExportPanelActions(props: WorkspaceProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectedChapters = props.chapters.filter((chapter) => selectedIds.includes(chapter.id))
+
+  function toggleChapter(chapterId: string) {
+    setSelectedIds((current) =>
+      current.includes(chapterId)
+        ? current.filter((id) => id !== chapterId)
+        : [...current, chapterId],
+    )
+  }
+
+  function exportSelected(format: 'markdown' | 'txt' | 'docx') {
+    props.onExportProject(
+      format,
+      'selected',
+      selectedChapters.map((chapter) => chapter.id),
+    )
+  }
+
   return (
-    <div className="editor-actions">
-      <button className="ghost-button" onClick={() => props.onExportProject('markdown', 'all')}>导出全书 MD</button>
-      <button className="ghost-button" onClick={() => props.onExportProject('txt', 'all')}>导出 TXT</button>
-      <button className="ghost-button" onClick={() => props.onExportProject('docx', 'all')}>导出 DOCX</button>
-    </div>
+    <section className="export-workspace">
+      <div className="export-action-grid">
+        <article>
+          <span>全书</span>
+          <strong>全部已确认章节</strong>
+          <div className="editor-actions">
+            <button className="ghost-button" onClick={() => props.onExportProject('markdown', 'all')}>MD</button>
+            <button className="ghost-button" onClick={() => props.onExportProject('txt', 'all')}>TXT</button>
+            <button className="ghost-button" onClick={() => props.onExportProject('docx', 'all')}>DOCX</button>
+          </div>
+        </article>
+        <article>
+          <span>当前章</span>
+          <strong>{props.currentChapter.title}</strong>
+          <div className="editor-actions">
+            <button className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>MD</button>
+            <button className="ghost-button" onClick={() => props.onExportProject('txt', 'chapter')}>TXT</button>
+            <button className="ghost-button" onClick={() => props.onExportProject('docx', 'chapter')}>DOCX</button>
+          </div>
+        </article>
+        <article>
+          <span>选中章节</span>
+          <strong>{selectedIds.length} 章</strong>
+          <div className="editor-actions">
+            <button className="ghost-button" disabled={selectedIds.length === 0} onClick={() => exportSelected('markdown')}>MD</button>
+            <button className="ghost-button" disabled={selectedIds.length === 0} onClick={() => exportSelected('txt')}>TXT</button>
+            <button className="ghost-button" disabled={selectedIds.length === 0} onClick={() => exportSelected('docx')}>DOCX</button>
+          </div>
+        </article>
+      </div>
+      <div className="export-chapter-list">
+        {props.chapters.map((chapter) => (
+          <label key={chapter.id}>
+            <input
+              type="checkbox"
+              checked={selectedIds.includes(chapter.id)}
+              onChange={() => toggleChapter(chapter.id)}
+            />
+            <span>{chapter.id}</span>
+            <strong>{chapter.title}</strong>
+            <small>{chapter.words} 字 · {chapter.state}</small>
+          </label>
+        ))}
+      </div>
+    </section>
   )
 }
 

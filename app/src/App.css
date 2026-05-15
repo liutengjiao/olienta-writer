@@ -2053,6 +2053,39 @@ button:disabled {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.export-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.export-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.export-action-grid article {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.export-action-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.export-action-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .export-chapter-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

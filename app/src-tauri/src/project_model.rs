@@ -1035,7 +1035,7 @@ pub fn export_manuscript(input: ExportInput) -> Result<ProjectFileDocument, Proj
         let chapter_id = input.chapter_id.as_deref().unwrap_or("001");
         let document = load_chapter(root.to_string_lossy().to_string(), chapter_id.to_owned())?;
         let content = if is_placeholder_or_empty(&document.content) {
-            format!("# Chapter {chapter_id}\n\n")
+            format!("# 第 {chapter_id} 章\n\n")
         } else {
             format!("{}\n", document.content.trim())
         };
@@ -5348,6 +5348,42 @@ mod tests {
             fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap(),
             "# 第一章\n\n正文内容。"
         );
+    }
+
+    #[test]
+    fn exports_selected_chapters_in_project_order() {
+        let (_temp, root) = create_temp_project(3);
+        save_chapter(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            "# 第一章\n\n第一章正文。".to_owned(),
+        )
+        .unwrap();
+        save_chapter(
+            root.to_string_lossy().to_string(),
+            "003".to_owned(),
+            "# 第三章\n\n第三章正文。".to_owned(),
+        )
+        .unwrap();
+
+        let selected = export_manuscript(ExportInput {
+            root_path: root.to_string_lossy().to_string(),
+            format: "markdown".to_owned(),
+            scope: Some("selected".to_owned()),
+            chapter_id: None,
+            chapter_ids: Some(vec!["003".to_owned(), "001".to_owned()]),
+        })
+        .unwrap();
+
+        assert_eq!(selected.relative_path, "exports/selected-chapters.md");
+        assert!(selected.content.contains("# 测试作品 选中章节"));
+        assert!(selected.content.contains("第一章正文。"));
+        assert!(selected.content.contains("第三章正文。"));
+        assert!(
+            selected.content.find("第一章正文。").unwrap()
+                < selected.content.find("第三章正文。").unwrap()
+        );
+        assert!(!selected.content.contains("第 2 章未命名"));
     }
 
     #[test]

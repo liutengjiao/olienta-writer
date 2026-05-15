@@ -17,6 +17,15 @@ npm install
 npm run build
 ```
 
+Run the full local verification suite with:
+
+```powershell
+cd app
+npm run verify
+```
+
+`npm run verify` runs the frontend build, lint, dev-server smoke check, and Rust tests. It will use an existing Vite server on `http://localhost:1420`, or start one temporarily for the smoke check.
+
 Desktop commands require Rust and Cargo:
 
 ```powershell

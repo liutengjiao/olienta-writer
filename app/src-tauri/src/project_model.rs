@@ -727,29 +727,29 @@ pub fn compose_writing_brief(
     let skills = read_selected_skills(&root)?;
 
     let mut content = String::new();
-    content.push_str(&format!("# Chapter {id} Writing Brief\n\n"));
-    content.push_str(&format!("Chapter: `{id}`\n\n"));
-    content.push_str("Olienta assembles this local Story System context for the current chapter. AI output must stay as a candidate draft until the author adopts it.\n\n");
-    content.push_str("## Boundaries\n\n");
-    content.push_str("1. Respect author confirmations, facts, framework files, blueprint, and selected Skills.\n");
-    content.push_str("2. Do not reveal climax, truth, foreshadow payoff, or character turn too early.\n");
-    content.push_str("3. Warn when blueprint, facts, character cards, or timeline conflict.\n");
-    content.push_str("4. Save generated text to candidates before confirmed manuscript.\n\n");
-    content.push_str(&format!("## Output\n\n- Candidate: `manuscript/candidates/{id}.md`\n- Manuscript: `manuscript/chapters/{id}.md`\n\n"));
-    content.push_str(&format!("## Blueprint\n\n{blueprint}\n\n"));
-    content.push_str(&format!("## Author Input\n\n{author_input}\n\n"));
-    content.push_str(&format!("## Framework\n\n{framework}\n\n"));
-    content.push_str(&format!("## Characters\n\n{character_context}\n\n"));
-    content.push_str(&format!("## Timeline\n\n{timeline_context}\n\n"));
-    content.push_str(&format!("## Confirmed Facts\n\n{confirmed_facts}\n\n"));
-    content.push_str(&format!("## Classified Facts\n\n{classified_facts}\n\n"));
-    content.push_str(&format!("## Author Confirmation\n\n{author_confirmation}\n\n"));
-    content.push_str(&format!("## Open Loops\n\n{open_loops}\n\n"));
-    content.push_str(&format!("## Selected Skills\n\n{skills}\n\n"));
-    content.push_str(&format!("## Methodology\n\n```json\n{methodology}\n```\n"));
+    content.push_str(&format!("# 第 {id} 章写作任务书\n\n"));
+    content.push_str(&format!("章节：`{id}`\n\n"));
+    content.push_str("Olienta 会为当前章节装配本地 Story System 上下文。AI 输出必须先保存为候选稿，只有作者明确采用后才能进入正文。\n\n");
+    content.push_str("## 边界\n\n");
+    content.push_str("1. 尊重作者确认、事实库、框架文件、章节蓝图和已选 Skill。\n");
+    content.push_str("2. 不要提前揭示高潮、真相、伏笔回收或角色转折。\n");
+    content.push_str("3. 如果蓝图、事实、角色卡或时间线存在冲突，必须明确提醒。\n");
+    content.push_str("4. 生成文本先进入候选稿，不得直接覆盖已确认正文。\n\n");
+    content.push_str(&format!("## 输出位置\n\n- 候选稿：`manuscript/candidates/{id}.md`\n- 正文：`manuscript/chapters/{id}.md`\n\n"));
+    content.push_str(&format!("## 章节蓝图\n\n{blueprint}\n\n"));
+    content.push_str(&format!("## 作者输入\n\n{author_input}\n\n"));
+    content.push_str(&format!("## 框架参考\n\n{framework}\n\n"));
+    content.push_str(&format!("## 角色上下文\n\n{character_context}\n\n"));
+    content.push_str(&format!("## 时间线\n\n{timeline_context}\n\n"));
+    content.push_str(&format!("## 已确认事实\n\n{confirmed_facts}\n\n"));
+    content.push_str(&format!("## 分类事实\n\n{classified_facts}\n\n"));
+    content.push_str(&format!("## 作者确认链\n\n{author_confirmation}\n\n"));
+    content.push_str(&format!("## 未闭合伏笔\n\n{open_loops}\n\n"));
+    content.push_str(&format!("## 已选 Skill\n\n{skills}\n\n"));
+    content.push_str(&format!("## 写作方法配置\n\n```json\n{methodology}\n```\n"));
 
     if !pinned_context.trim().is_empty() {
-        content.push_str("\n## Pinned Search Context\n");
+        content.push_str("\n## 钉选检索材料\n");
         content.push_str(&pinned_context);
         if !content.ends_with('\n') {
             content.push('\n');
@@ -1805,9 +1805,9 @@ pub fn extract_character_cards(root_path: String) -> Result<ProjectFileDocument,
     fs::create_dir_all(ensure_project_path(&root, "characters/cards")?)?;
     fs::create_dir_all(ensure_project_path(&root, "characters/history")?)?;
 
-    let mut index = String::from("# 瑙掕壊鍗＄储寮昞n\n鏉ユ簮锛歚framework/03-characters.md`\n\n");
-    let mut relations = String::from("# 鍏崇郴鍥捐氨\n\n鏉ユ簮锛歚framework/03-characters.md`\n\n");
-    let mut growth = String::from("# 瑙掕壊鎴愰暱绾縗n\n鏉ユ簮锛歚framework/03-characters.md`\n\n");
+    let mut index = String::from("# 角色卡索引\n\n来源：`framework/03-characters.md`\n\n");
+    let mut relations = String::from("# 关系图谱\n\n来源：`framework/03-characters.md`\n\n");
+    let mut growth = String::from("# 角色成长线\n\n来源：`framework/03-characters.md`\n\n");
 
     for (index_no, card) in cards.iter().enumerate() {
         let relative_path = format!(
@@ -1828,7 +1828,7 @@ pub fn extract_character_cards(root_path: String) -> Result<ProjectFileDocument,
         relations.push_str(&format!("## {}\n\n", card.name));
         let relation_lines = extract_character_relation_lines(&card.body, &cards, &card.name);
         if relation_lines.is_empty() {
-            relations.push_str("- 待作者补充关系、利益、欲望和冲突边。\n\n");
+            relations.push_str("- 待作者补充关系、利益、欲望和冲突边界。\n\n");
         } else {
             for line in relation_lines {
                 relations.push_str(&format!("- {}\n", line));
@@ -2558,7 +2558,7 @@ fn append_pinned_search_result(
     let normalized_source = source_path.replace("\\", "/");
     if !is_previewable_project_text(&normalized_source) {
         return Err(ProjectError::InvalidInput(
-            "Only local text search results can be pinned to a writing brief.".to_owned(),
+            "只有本地文本检索结果可以钉选进写作任务书。".to_owned(),
         ));
     }
     ensure_project_path(root, &normalized_source)?;
@@ -2568,8 +2568,8 @@ fn append_pinned_search_result(
     let target = ensure_project_path(root, &pinned_path)?;
     let mut content = fs::read_to_string(&target).unwrap_or_default();
     if content.trim().is_empty() {
-        content.push_str(&format!("# Chapter {chapter_id} Pinned Search Context\n\n"));
-        content.push_str("These snippets are selected by the author and must be considered when generating candidate drafts.\n");
+        content.push_str(&format!("# 第 {chapter_id} 章钉选检索材料\n\n"));
+        content.push_str("这些片段由作者手动选择，生成候选稿时必须纳入上下文。\n");
     }
     if !content.ends_with('\n') {
         content.push('\n');
@@ -2706,7 +2706,7 @@ fn safe_character_file_stem(name: &str) -> String {
         .to_owned();
 
     if stem.is_empty() {
-        "瑙掕壊".to_owned()
+        "角色".to_owned()
     } else {
         stem
     }
@@ -3461,12 +3461,12 @@ fn generate_candidate_content(
 ) -> CandidateGenerationResult {
     CandidateGenerationResult {
         content: format!(
-            "# Candidate Draft {chapter_id}\n\nGenerated from writing brief `{}`.\n\n{}",
+            "# 第 {chapter_id} 章候选稿\n\n根据写作任务书 `{}` 生成。\n\n{}",
             brief.relative_path,
             brief.content.lines().take(8).collect::<Vec<_>>().join("\n")
         ),
         source: "local-placeholder".to_owned(),
-        fallback_reason: Some("No active provider; generated local placeholder candidate.".to_owned()),
+        fallback_reason: Some("没有启用的 Provider，已生成本地占位候选稿。".to_owned()),
     }
 }
 
@@ -4546,22 +4546,22 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
         write_if_missing(
             root,
             &format!("manuscript/chapters/{id}.md"),
-            &format!("# Chapter {chapter} Untitled\n\n"),
+            &format!("# 第 {chapter} 章未命名\n\n"),
         )?;
         write_if_missing(
             root,
             &format!("manuscript/drafts/{id}.md"),
-            &format!("# Chapter {chapter} Draft\n\n"),
+            &format!("# 第 {chapter} 章草稿\n\n"),
         )?;
         write_if_missing(
             root,
             &format!("manuscript/author-input/{id}.md"),
-            &format!("# Chapter {chapter} Author Input\n\n"),
+            &format!("# 第 {chapter} 章作者输入\n\n"),
         )?;
         write_if_missing(
             root,
             &format!("blueprints/chapters/{id}.md"),
-            &format!("# Chapter {chapter} Blueprint\n\n## Goal\n\n## Must Happen\n\n## Forbidden Early\n\n## Notes\n\n"),
+            &format!("# 第 {chapter} 章蓝图\n\n## 本章目标\n\n## 必须发生\n\n## 禁止提前\n\n## 备注\n\n"),
         )?;
     }
 
@@ -5026,7 +5026,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(brief.relative_path, "tasks/writing-briefs/001.md");
-        assert!(brief.content.contains("Pinned Search Context"));
+        assert!(brief.content.contains("钉选检索材料"));
         assert!(brief.content.contains("雨夜收据"));
 
         let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
@@ -5037,14 +5037,14 @@ mod tests {
         assert_eq!(draft.relative_path, "manuscript/candidates/001.md");
         assert_eq!(draft.writing_brief_path, "tasks/writing-briefs/001.md");
         assert!(draft.review_path.ends_with("001.md"));
-        assert!(draft.content.contains("Candidate Draft"));
+        assert!(draft.content.contains("候选稿"));
         let review_report = fs::read_to_string(root.join(&draft.review_path)).unwrap();
         assert!(review_report.contains("# 第 001 章候选稿审查"));
         assert!(review_report.contains("### 生成与任务书"));
 
         let before_adoption =
             fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap();
-        assert!(!before_adoption.contains("Candidate Draft"));
+        assert!(!before_adoption.contains("候选稿"));
 
         let confirmation = record_candidate_adoption(
             root.to_string_lossy().to_string(),
@@ -5064,7 +5064,7 @@ mod tests {
         )
         .unwrap();
         let confirmed = load_chapter(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
-        assert!(confirmed.content.contains("Candidate Draft"));
+        assert!(confirmed.content.contains("候选稿"));
         assert!(fs::read_to_string(root.join("facts/author-confirmation.md"))
             .unwrap()
             .contains("001"));
@@ -5078,7 +5078,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(exported.relative_path, "exports/chapter-001.md");
-        assert!(exported.content.contains("Candidate Draft"));
+        assert!(exported.content.contains("候选稿"));
 
         let events = fs::read_to_string(root.join("logs/system-events.jsonl")).unwrap();
         assert!(events.contains("candidate_adopted"));
@@ -5159,7 +5159,7 @@ mod tests {
             ],
         )
         .unwrap();
-        assert!(brief.content.contains("Pinned Search Context"));
+        assert!(brief.content.contains("钉选检索材料"));
         assert!(brief.content.contains("source-a.md"));
 
         let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();

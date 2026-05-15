@@ -55,6 +55,23 @@ export function NovelSettingsPanel(props: WorkspaceProps) {
 }
 
 export function FrameworkPanel(props: WorkspaceProps) {
+  if (props.activeView === 'timeline') {
+    return (
+      <MarkdownDocument
+        title={VIEW_TITLES.timeline}
+        path={props.timelineEventsPath}
+        value={props.timelineEvents}
+        onChange={props.onChangeTimelineEvents}
+        onSave={props.onSaveTimelineEvents}
+        actions={
+          <span className="status-pill">
+            {props.timelineSettings.enabled ? 'Timeline Pro 已启用' : '普通时间线'}
+          </span>
+        }
+      />
+    )
+  }
+
   const path = FRAMEWORK_PATHS[props.activeView] ?? props.frameworkPath
   return (
     <MarkdownDocument

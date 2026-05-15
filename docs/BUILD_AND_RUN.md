@@ -41,6 +41,14 @@ npm run verify
 
 `npm run verify` runs the copy check, frontend build, lint, dev server smoke check, and Rust tests.
 
+The dev server smoke check verifies:
+
+- HTML status, content type, root mount, language, and title.
+- Linked Vite entry resources are reachable.
+- Vite error overlay marker is absent.
+- Key frontend source modules are reachable through Vite.
+- Core visible copy exists in the app entry, project panel, workspace, framework, document, and knowledge panels.
+
 ## Rust Check
 
 ```powershell

@@ -1,6 +1,32 @@
 const baseUrl = new URL(process.argv[2] ?? process.env.OLIENTA_SMOKE_URL ?? 'http://localhost:1420')
 
 const checks = []
+const sourceContracts = [
+  {
+    path: '/src/App.tsx',
+    includes: ['请选择或填写一个软件目录外的作品文件夹', '小说设置', '等待项目'],
+  },
+  {
+    path: '/src/components/ProjectPanel.tsx',
+    includes: ['项目结构', '知识库', '章节蓝图', '打开项目后显示章节'],
+  },
+  {
+    path: '/src/components/Workspace.tsx',
+    includes: ['本地优先写作工作台', 'Olienta workspace'],
+  },
+  {
+    path: '/src/components/workspace/CorePanels.tsx',
+    includes: ['创建项目', '小说设置', '章节蓝图'],
+  },
+  {
+    path: '/src/components/workspace/DocumentPanels.tsx',
+    includes: ['章节任务书', '导出', '模型调用'],
+  },
+  {
+    path: '/src/components/workspace/KnowledgePanels.tsx',
+    includes: ['本地全文检索', '角色卡', '已确认事实'],
+  },
+]
 
 function ok(label, detail = '') {
   checks.push({ label, detail, ok: true })
@@ -49,6 +75,12 @@ try {
   if (html.includes('id="root"')) ok('root mount', '#root found')
   else fail('root mount', '#root missing')
 
+  if (html.includes('<html lang="zh-CN">')) ok('document language', 'zh-CN')
+  else fail('document language', 'zh-CN missing')
+
+  if (html.includes('<title>Olienta Writer</title>')) ok('document title', 'Olienta Writer')
+  else fail('document title', 'unexpected or missing title')
+
   const resources = resourceUrlsFromHtml(html)
   if (resources.length > 0) ok('entry resources', `${resources.length} linked resource(s)`)
   else fail('entry resources', 'no script/link resources discovered')
@@ -62,6 +94,21 @@ try {
 
   if (html.includes('vite-error-overlay')) fail('vite overlay marker', 'overlay marker present in HTML')
   else ok('vite overlay marker', 'not present')
+
+  for (const contract of sourceContracts) {
+    const sourceUrl = new URL(contract.path, baseUrl)
+    const { response: sourceResponse, text: source } = await fetchText(sourceUrl)
+    if (!sourceResponse.ok) {
+      fail(`source ${contract.path}`, `${sourceResponse.status} ${sourceResponse.statusText}`)
+      continue
+    }
+
+    ok(`source ${contract.path}`, `${source.length} bytes`)
+    for (const expected of contract.includes) {
+      if (source.includes(expected)) ok(`copy ${contract.path}`, expected)
+      else fail(`copy ${contract.path}`, `missing "${expected}"`)
+    }
+  }
 } catch (error) {
   fail('dev server reachable', error instanceof Error ? error.message : String(error))
 }

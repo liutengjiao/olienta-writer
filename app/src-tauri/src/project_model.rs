@@ -4187,6 +4187,10 @@ fn docx_document_xml(markdown: &str) -> String {
     let mut paragraphs = String::new();
     let mut list_index = 0;
     let mut heading_one_count = 0;
+    let metadata = docx_metadata(markdown);
+
+    paragraphs.push_str(&docx_cover_xml(&metadata));
+    paragraphs.push_str(&docx_toc_xml(&metadata));
 
     for raw_line in markdown.lines() {
         let line = raw_line.trim();
@@ -4235,6 +4239,86 @@ fn docx_document_xml(markdown: &str) -> String {
   </w:body>
 </w:document>"#
     )
+}
+
+struct DocxMetadata {
+    title: String,
+    chapters: Vec<String>,
+    word_count: usize,
+}
+
+fn docx_metadata(markdown: &str) -> DocxMetadata {
+    let chapters = markdown
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("# "))
+        .map(|title| strip_markdown_inline(title.trim()))
+        .filter(|title| !title.is_empty())
+        .collect::<Vec<_>>();
+    let title = chapters
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "Olienta 作品导出".to_owned());
+    DocxMetadata {
+        title,
+        chapters,
+        word_count: count_words(&markdown_to_plain_text(markdown)),
+    }
+}
+
+fn docx_cover_xml(metadata: &DocxMetadata) -> String {
+    [
+        docx_centered_paragraph("Title", &metadata.title),
+        docx_centered_paragraph("Subtitle", "Olienta 作品导出"),
+        docx_centered_paragraph(
+            "ExportMeta",
+            &format!(
+                "章节数：{} · 字数：{}",
+                metadata.chapters.len(),
+                metadata.word_count
+            ),
+        ),
+        docx_page_break_paragraph(),
+    ]
+    .join("")
+}
+
+fn docx_toc_xml(metadata: &DocxMetadata) -> String {
+    let mut content = String::new();
+    content.push_str(&docx_centered_paragraph("Heading1", "目录"));
+    if metadata.chapters.is_empty() {
+        content.push_str(&docx_paragraph(
+            "Normal",
+            "暂无章节。",
+            false,
+            false,
+            0,
+            false,
+        ));
+    } else {
+        for (index, chapter) in metadata.chapters.iter().enumerate() {
+            content.push_str(&docx_paragraph(
+                "TocEntry",
+                &format!("{}. {}", index + 1, chapter),
+                false,
+                false,
+                0,
+                false,
+            ));
+        }
+    }
+    content.push_str(&docx_page_break_paragraph());
+    content
+}
+
+fn docx_centered_paragraph(style: &str, text: &str) -> String {
+    let escaped = xml_escape(text);
+    format!(
+        r#"<w:p><w:pPr><w:pStyle w:val="{style}"/><w:jc w:val="center"/></w:pPr><w:r><w:t>{escaped}</w:t></w:r></w:p>"#
+    )
+}
+
+fn docx_page_break_paragraph() -> String {
+    r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"#.to_owned()
 }
 
 fn docx_paragraph(
@@ -4338,6 +4422,30 @@ fn docx_styles_xml() -> String {
     <w:basedOn w:val="Normal"/>
     <w:pPr><w:jc w:val="center"/><w:spacing w:before="240" w:after="240"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:jc w:val="center"/><w:spacing w:before="1800" w:after="280"/></w:pPr>
+    <w:rPr><w:b/><w:sz w:val="44"/><w:szCs w:val="44"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Subtitle">
+    <w:name w:val="Subtitle"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:jc w:val="center"/><w:spacing w:after="180"/></w:pPr>
+    <w:rPr><w:color w:val="666666"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="ExportMeta">
+    <w:name w:val="ExportMeta"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+    <w:rPr><w:color w:val="666666"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="TocEntry">
+    <w:name w:val="TocEntry"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="80"/><w:ind w:left="420"/></w:pPr>
+    <w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
@@ -5822,8 +5930,18 @@ mod tests {
         assert!(document.contains("w:headerReference"));
         assert!(document.contains("w:footerReference"));
         assert!(document.contains("w:pageBreakBefore"));
+        assert!(document.contains(r#"<w:pStyle w:val="Title"/>"#));
+        assert!(document.contains(r#"<w:pStyle w:val="TocEntry"/>"#));
+        assert!(document.contains("目录"));
+        assert!(document.contains("章节数：2"));
+        assert!(document.contains("字数："));
+        assert!(document.contains("1. 测试作品"));
+        assert!(document.contains("2. 第二章"));
+        assert!(document.contains(r#"<w:br w:type="page"/>"#));
         assert!(styles.contains(r#"w:eastAsia="SimSun""#));
         assert!(styles.contains(r#"w:line="360""#));
+        assert!(styles.contains(r#"w:styleId="Title""#));
+        assert!(styles.contains(r#"w:styleId="TocEntry""#));
         assert!(header.contains("Olienta 作品导出"));
         assert!(footer.contains(" PAGE "));
     }

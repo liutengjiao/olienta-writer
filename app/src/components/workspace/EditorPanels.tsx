@@ -74,6 +74,7 @@ export function DraftPanel(props: WorkspaceProps) {
               <button className="ghost-button" onClick={props.onGenerateCandidate}>生成</button>
               <button className="ghost-button" onClick={props.onClearCandidate}>清空</button>
               <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')}>追加</button>
+              <button className="ghost-button" onClick={() => props.onAdoptCandidate('insert')}>插入光标</button>
               <button className="primary-button" onClick={() => props.onAdoptCandidate('replace')}>替换</button>
             </>
           }
@@ -243,6 +244,7 @@ export function ManuscriptPanel(props: WorkspaceProps) {
           value={props.manuscript}
           onChange={props.onChangeManuscript}
           onSave={props.onSaveChapter}
+          onSelectionChange={props.onChangeManuscriptSelection}
           actions={
             <>
               <button type="button" className="ghost-button" onClick={props.onToggleFocusMode}>纯写作</button>
@@ -313,6 +315,7 @@ export function MarkdownDocument(props: {
   value: string
   onChange: (value: string) => void
   onSave: () => void
+  onSelectionChange?: (start: number, end: number) => void
   actions?: ReactNode
 }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
@@ -354,6 +357,10 @@ export function MarkdownDocument(props: {
     updateValue(next.value, next.selectionStart, next.selectionEnd)
   }
 
+  function reportSelection(textarea: HTMLTextAreaElement) {
+    props.onSelectionChange?.(textarea.selectionStart, textarea.selectionEnd)
+  }
+
   return (
     <section className="editor-card module-document-panel">
       <div className="card-heading">
@@ -388,6 +395,9 @@ export function MarkdownDocument(props: {
             onChange={(event) => props.onChange(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onSelect={(event) => reportSelection(event.currentTarget)}
+            onClick={(event) => reportSelection(event.currentTarget)}
+            onKeyUp={(event) => reportSelection(event.currentTarget)}
           />
           <div className="markdown-editor-meta">
             <span>{stats.lines} 行</span>
@@ -700,6 +710,10 @@ export function FocusMode(props: WorkspaceProps) {
     updateValue(next.value, next.selectionStart, next.selectionEnd)
   }
 
+  function reportSelection(textarea: HTMLTextAreaElement) {
+    props.onChangeManuscriptSelection(textarea.selectionStart, textarea.selectionEnd)
+  }
+
   return (
     <section className="focus-mode">
       <div className="focus-topbar">
@@ -713,6 +727,9 @@ export function FocusMode(props: WorkspaceProps) {
         onChange={(event) => props.onChangeManuscript(event.target.value)}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onSelect={(event) => reportSelection(event.currentTarget)}
+        onClick={(event) => reportSelection(event.currentTarget)}
+        onKeyUp={(event) => reportSelection(event.currentTarget)}
       />
       <div className="focus-meta">
         <span>{stats.lines} 行</span>

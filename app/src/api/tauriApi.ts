@@ -157,7 +157,7 @@ export function reviewCandidateDraftForChapter(rootPath: string, chapterId: stri
 export function recordCandidateAdoption(
   rootPath: string,
   chapterId: string,
-  mode: 'replace' | 'append',
+  mode: 'replace' | 'append' | 'insert',
   candidatePath: string,
   manuscriptPath: string,
 ) {

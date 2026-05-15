@@ -55,6 +55,7 @@ function App() {
   const [activeModuleView, setActiveModuleView] = useState<ModuleSubViewKey>('home-entry')
   const [activeView, setActiveView] = useState<ViewKey>('novel-settings')
   const [focusMode, setFocusMode] = useState(false)
+  const [manuscriptSelection, setManuscriptSelection] = useState<{ start: number; end: number } | null>(null)
   const [agentOpen, setAgentOpen] = useState(false)
 
   useEffect(() => {
@@ -794,16 +795,13 @@ function App() {
     setMessage('已从历史版本恢复到当前候选稿编辑区；尚未写入正文。')
   }
 
-  async function adoptCandidateDraft(mode: 'replace' | 'append' = 'replace') {
+  async function adoptCandidateDraft(mode: 'replace' | 'append' | 'insert' = 'replace') {
     if (!candidate.trim()) {
       setMessage('候选稿为空，不能采用。')
       return
     }
 
-    const adopted =
-      mode === 'append' && manuscript.trim()
-        ? `${manuscript.trimEnd()}\n\n${candidate.trimStart()}`
-        : candidate
+    const adopted = adoptCandidateIntoManuscript(manuscript, candidate, mode, manuscriptSelection)
     setManuscript(adopted)
     const saved = await saveChapterContent(adopted)
     if (saved && project && isTauriRuntime) {
@@ -819,11 +817,19 @@ function App() {
       setMessage(
         mode === 'append'
           ? `候选稿已追加到正文并保存确认；确认摘要已写入 ${confirmation.relative_path}。`
-          : `候选稿已替换正文并保存确认；确认摘要已写入 ${confirmation.relative_path}。`,
+          : mode === 'insert'
+            ? `候选稿已插入正文光标位置并保存确认；确认摘要已写入 ${confirmation.relative_path}。`
+            : `候选稿已替换正文并保存确认；确认摘要已写入 ${confirmation.relative_path}。`,
       )
       return
     }
-    setMessage(mode === 'append' ? '候选稿已追加到正文并保存确认。' : '候选稿已替换正文并保存确认。')
+    setMessage(
+      mode === 'append'
+        ? '候选稿已追加到正文并保存确认。'
+        : mode === 'insert'
+          ? '候选稿已插入正文光标位置并保存确认。'
+          : '候选稿已替换正文并保存确认。',
+    )
   }
 
   async function exportProject(
@@ -995,6 +1001,7 @@ function App() {
         onSaveCandidate={() => void saveCandidateDraft()}
         onClearCandidate={() => void clearCandidateDraft()}
         onAdoptCandidate={(mode) => void adoptCandidateDraft(mode)}
+        onChangeManuscriptSelection={(start, end) => setManuscriptSelection({ start, end })}
         onLoadCandidateHistory={(relativePath) => void loadCandidateHistoryPreview(relativePath)}
         onRestoreCandidateHistory={() => void restoreCandidateHistory()}
         onChangeManuscript={changeManuscript}
@@ -1098,7 +1105,7 @@ function App() {
           onGenerateCandidate={() => void generateCandidateDraft()}
           onSaveCandidate={() => void saveCandidateDraft()}
           onClearCandidate={() => void clearCandidateDraft()}
-          onAdoptCandidate={() => void adoptCandidateDraft('replace')}
+          onAdoptCandidate={() => void adoptCandidateDraft('insert')}
         />
       )}
 
@@ -1116,6 +1123,28 @@ function App() {
       <Taskbar tasks={tasks} />
     </main>
   )
+}
+
+function adoptCandidateIntoManuscript(
+  manuscript: string,
+  candidate: string,
+  mode: 'replace' | 'append' | 'insert',
+  selection: { start: number; end: number } | null,
+) {
+  if (mode === 'replace') return candidate
+  if (mode === 'append') {
+    return manuscript.trim()
+      ? `${manuscript.trimEnd()}\n\n${candidate.trimStart()}`
+      : candidate
+  }
+  const fallback = manuscript.length
+  const start = Math.max(0, Math.min(selection?.start ?? fallback, manuscript.length))
+  const end = Math.max(start, Math.min(selection?.end ?? fallback, manuscript.length))
+  const before = manuscript.slice(0, start).replace(/[ \t]+$/g, '')
+  const after = manuscript.slice(end).replace(/^[ \t]+/g, '')
+  const prefix = before && !before.endsWith('\n') ? '\n\n' : ''
+  const suffix = after && !after.startsWith('\n') ? '\n\n' : ''
+  return `${before}${prefix}${candidate.trim()}${suffix}${after}`
 }
 
 export default App

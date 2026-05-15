@@ -4,7 +4,7 @@ const checks = []
 const sourceContracts = [
   {
     path: '/src/App.tsx',
-    includes: ['请选择或填写一个软件目录外的作品文件夹', '小说设置', '等待项目'],
+    includes: ['请选择或填写一个软件目录外的作品文件夹', '小说设置', '等待项目', 'adoptCandidateIntoManuscript'],
   },
   {
     path: '/src/components/ProjectPanel.tsx',
@@ -30,7 +30,7 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/EditorPanels.tsx',
-    includes: ['候选稿与正文对比', '候选稿新增段落', '正文独有段落', '逐字差异预览', 'compareParagraphs', 'compareInlineDiff', 'DiffPreviewList', 'applyMarkdownAction', 'htmlToMarkdown', 'renderMarkdownPreview', 'markdownActionForKey'],
+    includes: ['候选稿与正文对比', '候选稿新增段落', '正文独有段落', '逐字差异预览', '插入光标', 'onChangeManuscriptSelection', 'compareParagraphs', 'compareInlineDiff', 'DiffPreviewList', 'applyMarkdownAction', 'htmlToMarkdown', 'renderMarkdownPreview', 'markdownActionForKey'],
   },
   {
     path: '/src/components/workspace/DocumentPanels.tsx',

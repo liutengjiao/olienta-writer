@@ -89,6 +89,32 @@ framework/
 
 这些文件都可以作为简单 Markdown 呈现和编辑，不需要复杂表单先行。
 
+## 知识库与事实文件
+
+```text
+knowledge/
+  README.md
+  markdown/
+    README.md
+    imported/
+  search/
+    README.md
+
+facts/
+  author-confirmation.md
+  confirmed-facts.md
+  open-loops.md
+  forbidden-rules.md
+  character-facts.md
+  time-facts.md
+  location-facts.md
+  relation-facts.md
+  event-facts.md
+  world-rules.md
+```
+
+新建和修复项目时会补齐这些文件，项目健康检查应达到 `ready` 且没有 warning。
+
 ## 事实库
 
 ```text

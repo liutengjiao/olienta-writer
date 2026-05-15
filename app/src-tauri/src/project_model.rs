@@ -2268,9 +2268,11 @@ fn required_project_directories() -> &'static [(&'static str, &'static str)] {
         ("manuscript/author-input", "作者输入"),
         ("facts", "事实库"),
         ("timeline", "时间轴及里程碑"),
+        ("knowledge/markdown/imported", "导入资料"),
+        ("characters/cards", "角色卡"),
         ("skills/selected", "已选择 Skill"),
-        ("tasks", "任务书"),
-        ("logs", "日志"),
+        ("tasks/writing-briefs", "写作任务书"),
+        ("logs/model-calls", "模型调用日志"),
         ("exports", "导出目录"),
         (".olienta", "项目配置"),
     ]
@@ -2287,8 +2289,15 @@ fn required_project_files() -> &'static [(&'static str, &'static str)] {
         ("framework/06-style.md", "文风配置"),
         ("facts/author-confirmation.md", "作者确认"),
         ("facts/confirmed-facts.md", "已确认事实"),
+        ("facts/open-loops.md", "未闭合伏笔"),
+        ("facts/time-facts.md", "时间事实"),
+        ("facts/location-facts.md", "地点事实"),
+        ("facts/relation-facts.md", "关系事实"),
+        ("facts/event-facts.md", "事件事实"),
+        ("facts/world-rules.md", "世界规则"),
         ("facts/forbidden-rules.md", "禁止违背"),
         ("timeline/events.md", "时间轴事件"),
+        ("timeline/milestones.md", "里程碑"),
         (".olienta/ai-providers.json", "AI Provider 配置"),
     ]
 }
@@ -2296,10 +2305,14 @@ fn required_project_files() -> &'static [(&'static str, &'static str)] {
 fn recommended_project_files() -> &'static [(&'static str, &'static str)] {
     &[
         ("knowledge/README.md", "知识库说明"),
+        ("knowledge/markdown/README.md", "本地 Markdown 说明"),
+        ("knowledge/search/README.md", "全文检索说明"),
         ("characters/cards/README.md", "角色卡索引"),
         ("logs/system-events.jsonl", "系统事件日志"),
+        ("logs/model-calls/README.md", "模型调用说明"),
         ("logs/model-calls/history.md", "模型调用记录"),
         ("tasks/history.jsonl", "任务历史"),
+        ("tasks/current.json", "当前任务状态"),
         ("models/README.md", "模型调用说明"),
     ]
 }
@@ -4497,16 +4510,37 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
     write_if_missing(root, "facts/author-confirmation.md", "# 作者确认边界\n\n")?;
     write_if_missing(root, "facts/open-loops.md", "# 未闭合伏笔\n\n")?;
     write_if_missing(root, "facts/character-facts.md", "# 角色事实\n\n")?;
+    write_if_missing(root, "facts/time-facts.md", "# 时间事实\n\n")?;
     write_if_missing(root, "facts/event-facts.md", "# 已发生事件\n\n")?;
     write_if_missing(root, "facts/location-facts.md", "# 地点事实\n\n")?;
+    write_if_missing(root, "facts/relation-facts.md", "# 关系事实\n\n")?;
+    write_if_missing(root, "facts/world-rules.md", "# 世界规则\n\n")?;
+    write_if_missing(root, "facts/forbidden-rules.md", "# 禁止违背\n\n")?;
     write_if_missing(root, "timeline/events.md", "# 时间线事件\n\n")?;
     write_if_missing(root, "timeline/milestones.md", "# 里程碑\n\n")?;
+    write_if_missing(
+        root,
+        "knowledge/README.md",
+        "# 知识库\n\n导入资料、事实、伏笔、角色和检索索引都保存在本地文件夹中。\n",
+    )?;
+    write_if_missing(
+        root,
+        "knowledge/markdown/README.md",
+        "# 本地 Markdown\n\n这里保存作者导入或整理的 Markdown/TXT 资料。\n",
+    )?;
+    write_if_missing(
+        root,
+        "knowledge/search/README.md",
+        "# 本地全文检索\n\n检索结果可以钉选进当前章节任务书。\n",
+    )?;
+    write_if_missing(root, "characters/cards/README.md", "# 角色卡\n\n从角色图谱抽取的角色卡会保存在这里。\n")?;
     write_if_missing(root, "characters/cards/INDEX.md", "# 角色卡索引\n\n")?;
     write_if_missing(root, "characters/relations.md", "# 关系图谱\n\n")?;
     write_if_missing(root, "characters/growth.md", "# 角色成长线\n\n")?;
     write_if_missing(root, "tasks/history.jsonl", "")?;
     write_if_missing(root, "tasks/current.json", "{}\n")?;
     write_if_missing(root, "logs/system-events.jsonl", "")?;
+    write_if_missing(root, "logs/model-calls/README.md", "# 模型调用\n\n这里记录 Provider 测试和 AI 调用历史。\n")?;
     write_if_missing(root, "logs/model-calls/history.md", "# 模型调用记录\n\n")?;
     write_if_missing(root, "models/README.md", "# 模型调用\n\nAI Provider 配置保存在 `.olienta/ai-providers.json`。\n")?;
     write_if_missing(
@@ -4926,14 +4960,28 @@ mod tests {
         assert!(root.join("framework/05-world.md").exists());
         assert!(!root.join("framework/04-world.md").exists());
         assert!(!root.join("framework/05-plot.md").exists());
+        assert!(root.join("knowledge/README.md").exists());
+        assert!(root.join("knowledge/markdown/README.md").exists());
+        assert!(root.join("knowledge/search/README.md").exists());
         assert!(root.join("blueprints/chapters/001.md").exists());
         assert!(root.join("manuscript/drafts/001.md").exists());
         assert!(root.join("manuscript/chapters/001.md").exists());
         assert!(root.join("facts/confirmed-facts.md").exists());
+        assert!(root.join("facts/time-facts.md").exists());
+        assert!(root.join("facts/relation-facts.md").exists());
+        assert!(root.join("facts/world-rules.md").exists());
+        assert!(root.join("facts/forbidden-rules.md").exists());
+        assert!(root.join("characters/cards/README.md").exists());
+        assert!(root.join("logs/model-calls/README.md").exists());
         assert!(root.join(".olienta/ai-providers.json").exists());
 
         let chapters = list_chapters(root.to_string_lossy().to_string()).unwrap();
         assert_eq!(chapters[0].state, "待写");
+
+        let health = inspect_project_health(root.to_string_lossy().to_string()).unwrap();
+        assert!(health.ready);
+        assert_eq!(health.missing_count, 0);
+        assert_eq!(health.warning_count, 0);
     }
 
     #[test]

@@ -3307,19 +3307,26 @@ fn backup_confirmed_facts(root: &Path, facts_path: &Path) -> Result<(), ProjectE
 
 fn extract_chapter_facts(chapter_id: &str, title: &str, content: &str) -> Vec<String> {
     let mut facts = vec![format!(
-        "- {chapter_id}《{title}》已保存为作者确认正文，后续 AI 生成必须尊重。"
+        "- {chapter_id}《{title}》已保存为作者确认正文，后续 AI 生成必须尊重。{}",
+        fact_source_marker(chapter_id, title, content, title)
     )];
 
     for name in ["杨志远", "王静", "欧阳", "苏青", "国叶儿"] {
         if content.contains(name) {
-            facts.push(format!("- {chapter_id} 出现角色：{name}。"));
+            facts.push(format!(
+                "- {chapter_id} 出现角色：{name}。{}",
+                fact_source_marker(chapter_id, title, content, name)
+            ));
         }
     }
 
     for year in 2017..=2024 {
         let year_text = year.to_string();
         if content.contains(&year_text) {
-            facts.push(format!("- {chapter_id} 提到年份：{year_text}。"));
+            facts.push(format!(
+                "- {chapter_id} 提到年份：{year_text}。{}",
+                fact_source_marker(chapter_id, title, content, &year_text)
+            ));
         }
     }
 
@@ -3327,11 +3334,67 @@ fn extract_chapter_facts(chapter_id: &str, title: &str, content: &str) -> Vec<St
         "广州", "上海", "深圳", "手术", "股权", "诊所", "现金", "病历", "CBD",
     ] {
         if content.contains(keyword) {
-            facts.push(format!("- {chapter_id} 提到关键词：{keyword}。"));
+            facts.push(format!(
+                "- {chapter_id} 提到关键词：{keyword}。{}",
+                fact_source_marker(chapter_id, title, content, keyword)
+            ));
         }
     }
 
     facts
+}
+
+fn fact_source_marker(chapter_id: &str, title: &str, content: &str, needle: &str) -> String {
+    let paragraphs = source_paragraphs(content);
+    let matched = paragraphs
+        .iter()
+        .position(|paragraph| !needle.is_empty() && paragraph.contains(needle))
+        .or_else(|| {
+            paragraphs
+                .iter()
+                .position(|paragraph| !paragraph.starts_with('#'))
+        })
+        .unwrap_or(0);
+    let snippet = paragraphs
+        .get(matched)
+        .map(|paragraph| trim_source_snippet(paragraph))
+        .unwrap_or_default();
+
+    format!(
+        " 来源：第 {chapter_id} 章《{title}》，段落 {}：{snippet}",
+        matched + 1
+    )
+}
+
+fn source_paragraphs(content: &str) -> Vec<String> {
+    let mut paragraphs = Vec::new();
+    let mut current = Vec::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            if !current.is_empty() {
+                paragraphs.push(current.join(" "));
+                current.clear();
+            }
+        } else {
+            current.push(line.trim().to_owned());
+        }
+    }
+
+    if !current.is_empty() {
+        paragraphs.push(current.join(" "));
+    }
+
+    paragraphs
+}
+
+fn trim_source_snippet(paragraph: &str) -> String {
+    let compact = paragraph.replace('\t', " ").trim().to_owned();
+    if compact.chars().count() <= 80 {
+        compact
+    } else {
+        format!("{}...", compact.chars().take(80).collect::<String>())
+    }
 }
 
 fn write_classified_fact_files(root: &Path, facts: &[String]) -> Result<(), ProjectError> {
@@ -3356,19 +3419,26 @@ fn write_classified_fact_files(root: &Path, facts: &[String]) -> Result<(), Proj
 }
 
 fn classified_fact_path(fact: &str) -> &'static str {
-    if fact.contains("角色") || fact.contains("人物") || fact.contains("出场") {
+    let fact_body = fact.split(" 来源：").next().unwrap_or(fact);
+    if fact_body.contains("角色") || fact_body.contains("人物") || fact_body.contains("出场")
+    {
         "facts/character-facts.md"
-    } else if fact.contains("时间") || fact.contains("年") || fact.contains("章") {
+    } else if fact_body.contains("时间") || fact_body.contains("年") || fact_body.contains("章")
+    {
         "facts/time-facts.md"
-    } else if fact.contains("地点")
-        || fact.contains("CBD")
-        || fact.contains("深圳")
-        || fact.contains("诊所")
+    } else if fact_body.contains("地点")
+        || fact_body.contains("CBD")
+        || fact_body.contains("深圳")
+        || fact_body.contains("诊所")
     {
         "facts/location-facts.md"
-    } else if fact.contains("关系") || fact.contains("冲突") || fact.contains("爱") {
+    } else if fact_body.contains("关系") || fact_body.contains("冲突") || fact_body.contains("爱")
+    {
         "facts/relation-facts.md"
-    } else if fact.contains("规则") || fact.contains("世界观") || fact.contains("禁止") {
+    } else if fact_body.contains("规则")
+        || fact_body.contains("世界观")
+        || fact_body.contains("禁止")
+    {
         "facts/world-rules.md"
     } else {
         "facts/event-facts.md"
@@ -5195,7 +5265,7 @@ mod tests {
         let saved = save_chapter(
             root.to_string_lossy().to_string(),
             "1".to_owned(),
-            "# 第一章\n\n真正的正文内容。".to_owned(),
+            "# 第一章\n\n杨志远在深圳诊所整理 2019 年的现金流水。".to_owned(),
         )
         .unwrap();
 
@@ -5206,11 +5276,17 @@ mod tests {
                 .unwrap()
                 .contains("001")
         );
+        let confirmed_facts = fs::read_to_string(root.join("facts/confirmed-facts.md")).unwrap();
+        assert!(confirmed_facts.contains("来源：第 001 章《第一章》，段落 2"));
+        assert!(confirmed_facts.contains("杨志远在深圳诊所整理 2019 年的现金流水"));
         let time_facts = fs::read_to_string(root.join("facts/time-facts.md")).unwrap();
         assert!(time_facts.contains("# 时间事实"));
+        assert!(time_facts.contains("提到年份：2019"));
+        assert!(time_facts.contains("来源：第 001 章《第一章》，段落 2"));
         let location_facts = fs::read_to_string(root.join("facts/location-facts.md")).unwrap();
         assert!(location_facts.contains("# 地点事实"));
-        assert!(location_facts.contains("暂无自动抽取内容。作者可以手动补充。"));
+        assert!(location_facts.contains("提到关键词：深圳"));
+        assert!(location_facts.contains("来源：第 001 章《第一章》，段落 2"));
         assert!(fs::read_to_string(root.join("logs/system-events.jsonl"))
             .unwrap()
             .contains("chapter_saved"));

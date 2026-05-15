@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
@@ -285,20 +285,212 @@ function DocumentHubPanel(props: {
 }
 
 function ProviderPanel(props: WorkspaceProps) {
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  const parsed = parseProviders(props.aiProvidersJson)
+  const providers = parsed.ok ? parsed.providers : []
+  const coverage = PROVIDER_USE_CASES.map((useCase) => ({
+    ...useCase,
+    provider: providers.find((provider) =>
+      provider.enabled !== false &&
+      (provider.useCases.length === 0 || provider.useCases.includes(useCase.key)),
+    ),
+  }))
+
+  function updateProviders(nextProviders: AiProviderDraft[]) {
+    props.onChangeAiProvidersJson(`${JSON.stringify(nextProviders, null, 2)}\n`)
+  }
+
+  function updateProvider(index: number, patch: Partial<AiProviderDraft>) {
+    updateProviders(providers.map((provider, providerIndex) =>
+      providerIndex === index ? { ...provider, ...patch } : provider,
+    ))
+  }
+
+  function moveProvider(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= providers.length) return
+    const next = [...providers]
+    const [item] = next.splice(index, 1)
+    next.splice(target, 0, item)
+    updateProviders(next)
+  }
+
+  function toggleUseCase(index: number, useCase: string) {
+    const provider = providers[index]
+    const current = new Set(provider.useCases)
+    if (current.has(useCase)) current.delete(useCase)
+    else current.add(useCase)
+    updateProvider(index, { useCases: Array.from(current) })
+  }
+
+  function addProvider() {
+    updateProviders([
+      ...providers,
+      {
+        id: `provider-${providers.length + 1}`,
+        name: '新 Provider',
+        kind: 'openai-compatible',
+        enabled: true,
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: '',
+        temperature: 0.7,
+        useCases: ['chapter'],
+      },
+    ])
+  }
+
+  function duplicateProvider(index: number) {
+    const provider = providers[index]
+    updateProviders([
+      ...providers.slice(0, index + 1),
+      { ...provider, id: `${provider.id || 'provider'}-copy`, name: `${provider.name || 'Provider'} 副本` },
+      ...providers.slice(index + 1),
+    ])
+  }
+
+  function deleteProvider(index: number) {
+    updateProviders(providers.filter((_, providerIndex) => providerIndex !== index))
+  }
+
+  function exportProviders() {
+    const blob = new Blob([props.aiProvidersJson], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'olienta-ai-providers.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importProviders(file: File | undefined) {
+    if (!file) return
+    const content = await file.text()
+    try {
+      const parsedContent = JSON.parse(content) as unknown
+      props.onChangeAiProvidersJson(`${JSON.stringify(parsedContent, null, 2)}\n`)
+    } catch {
+      props.onChangeAiProvidersJson(content.endsWith('\n') ? content : `${content}\n`)
+    }
+  }
+
   return (
-    <MarkdownDocument
-      title="AI Provider 配置"
-      path=".olienta/ai-providers.json"
-      value={props.aiProvidersJson}
-      onChange={props.onChangeAiProvidersJson}
-      onSave={props.onSaveAiProviders}
-      actions={
-        <>
-          <button className="ghost-button" onClick={props.onTestAiProvider}>测试</button>
-          <span className="status-pill">{props.providerTestMessage}</span>
-        </>
-      }
-    />
+    <section className="provider-workspace">
+      <section className="provider-overview">
+        <div className="card-heading">
+          <div>
+            <h2>AI Provider</h2>
+            <p>按顺序匹配用途；同一用途会优先使用排在前面的可用 Provider。</p>
+          </div>
+          <div className="editor-actions">
+            <button type="button" className="ghost-button" onClick={addProvider} disabled={!parsed.ok}>新增</button>
+            <button type="button" className="ghost-button" onClick={exportProviders}>导出 JSON</button>
+            <button type="button" className="ghost-button" onClick={() => importInputRef.current?.click()}>导入 JSON</button>
+            <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>测试</button>
+            <span className="status-pill">{props.providerTestMessage}</span>
+          </div>
+        </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(event) => {
+            void importProviders(event.target.files?.[0]).finally(() => {
+              event.currentTarget.value = ''
+            })
+          }}
+        />
+        {!parsed.ok && <p className="empty-note danger">Provider JSON 无法解析：{parsed.message}</p>}
+        {parsed.ok && (
+          <>
+            <div className="provider-coverage-grid">
+              {coverage.map((item) => (
+                <article key={item.key}>
+                  <span>{item.title}</span>
+                  <strong>{item.provider?.name || item.provider?.id || '未覆盖'}</strong>
+                  <small>{item.provider?.model || item.detail}</small>
+                </article>
+              ))}
+            </div>
+            <div className="provider-grid">
+              {providers.map((provider, index) => (
+                <article className={`provider-card ${provider.enabled === false ? 'disabled' : ''}`} key={`${provider.id}-${index}`}>
+                  <div className="provider-card-header">
+                    <div>
+                      <h3>{provider.name || provider.id || `Provider ${index + 1}`}</h3>
+                      <p>{provider.kind || 'openai-compatible'} · {provider.model || '未设置模型'}</p>
+                    </div>
+                    <div className="editor-actions">
+                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, -1)} disabled={index === 0}>上移</button>
+                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, 1)} disabled={index === providers.length - 1}>下移</button>
+                      <button type="button" className="ghost-button" onClick={() => duplicateProvider(index)}>复制</button>
+                      <button type="button" className="ghost-button danger" onClick={() => deleteProvider(index)}>删除</button>
+                    </div>
+                  </div>
+                  <div className="provider-settings">
+                    <label className="switch-row">
+                      <input
+                        type="checkbox"
+                        checked={provider.enabled !== false}
+                        onChange={(event) => updateProvider(index, { enabled: event.target.checked })}
+                      />
+                      <span>启用</span>
+                    </label>
+                    <label>
+                      <span>名称</span>
+                      <input value={provider.name} onChange={(event) => updateProvider(index, { name: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>类型</span>
+                      <input value={provider.kind} onChange={(event) => updateProvider(index, { kind: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>Base URL</span>
+                      <input value={provider.baseUrl} onChange={(event) => updateProvider(index, { baseUrl: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>模型</span>
+                      <input value={provider.model} onChange={(event) => updateProvider(index, { model: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>温度</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="2"
+                        value={provider.temperature ?? 0.7}
+                        onChange={(event) => updateProvider(index, { temperature: Number(event.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <div className="use-case-row">
+                    {PROVIDER_USE_CASES.map((useCase) => (
+                      <label key={useCase.key}>
+                        <input
+                          type="checkbox"
+                          checked={provider.useCases.includes(useCase.key)}
+                          onChange={() => toggleUseCase(index, useCase.key)}
+                        />
+                        <span>{useCase.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+      <MarkdownDocument
+        title="原始 JSON"
+        path=".olienta/ai-providers.json"
+        value={props.aiProvidersJson}
+        onChange={props.onChangeAiProvidersJson}
+        onSave={props.onSaveAiProviders}
+      />
+    </section>
   )
 }
 
@@ -379,6 +571,65 @@ function groupMarkdownFiles(files: MarkdownFileSummary[]) {
     groups.set(file.category, group)
   }
   return Array.from(groups.entries())
+}
+
+type AiProviderDraft = {
+  id: string
+  name: string
+  kind: string
+  enabled: boolean
+  baseUrl: string
+  apiKey?: string
+  model: string
+  temperature?: number
+  useCases: string[]
+  [key: string]: unknown
+}
+
+const PROVIDER_USE_CASES = [
+  { key: 'chapter', title: '整章正文', detail: '候选稿生成' },
+  { key: 'blueprint', title: '章节蓝图', detail: '蓝图草案' },
+  { key: 'framework', title: '故事框架', detail: '框架草案' },
+  { key: 'facts', title: '事实抽取', detail: '后续 AI 抽取' },
+  { key: 'timeline', title: '时间线', detail: 'Pro 冲突检查' },
+  { key: 'style', title: '风格提示', detail: '风格辅助' },
+]
+
+function parseProviders(content: string): { ok: true; providers: AiProviderDraft[] } | { ok: false; message: string } {
+  try {
+    const parsed = JSON.parse(content) as unknown
+    if (!Array.isArray(parsed)) {
+      return { ok: false, message: '顶层必须是 Provider 数组。' }
+    }
+    return {
+      ok: true,
+      providers: parsed.map((item, index) => normalizeProviderDraft(item, index)),
+    }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
+  const value = isRecord(item) ? item : {}
+  const useCases = Array.isArray(value.useCases)
+    ? value.useCases.filter((useCase): useCase is string => typeof useCase === 'string')
+    : []
+  return {
+    ...value,
+    id: typeof value.id === 'string' ? value.id : `provider-${index + 1}`,
+    name: typeof value.name === 'string' ? value.name : `Provider ${index + 1}`,
+    kind: typeof value.kind === 'string' ? value.kind : 'openai-compatible',
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
+    baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
+    model: typeof value.model === 'string' ? value.model : '',
+    temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
+    useCases,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function formatBytes(bytes: number) {

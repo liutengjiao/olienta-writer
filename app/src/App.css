@@ -1573,6 +1573,42 @@ button:disabled {
   gap: 16px;
 }
 
+.provider-workspace,
+.provider-overview {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.provider-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.provider-coverage-grid article {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.provider-coverage-grid span,
+.provider-coverage-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.provider-coverage-grid strong {
+  display: block;
+  margin: 6px 0;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
 .provider-card {
   display: grid;
   gap: 16px;

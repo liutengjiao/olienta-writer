@@ -5259,6 +5259,61 @@ mod tests {
     }
 
     #[test]
+    fn provider_selection_respects_order_and_use_case() {
+        let (_temp, root) = create_temp_project(1);
+        fs::write(
+            root.join(".olienta/ai-providers.json"),
+            r#"[
+  {
+    "id": "disabled",
+    "name": "Disabled",
+    "kind": "openai-compatible",
+    "enabled": false,
+    "baseUrl": "https://example.invalid/v1",
+    "apiKey": "sk-disabled",
+    "model": "disabled-model",
+    "useCases": ["chapter"]
+  },
+  {
+    "id": "blueprint-first",
+    "name": "Blueprint First",
+    "kind": "openai-compatible",
+    "enabled": true,
+    "baseUrl": "https://example.invalid/v1",
+    "apiKey": "sk-blueprint",
+    "model": "blueprint-model",
+    "useCases": ["blueprint"]
+  },
+  {
+    "id": "chapter-second",
+    "name": "Chapter Second",
+    "kind": "openai-compatible",
+    "enabled": true,
+    "baseUrl": "https://example.invalid/v1",
+    "apiKey": "sk-chapter",
+    "model": "chapter-model",
+    "useCases": ["chapter"]
+  }
+]"#,
+        )
+        .unwrap();
+
+        let chapter = select_provider_for_use_case(&root, &["chapter"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(chapter.id.as_deref(), Some("chapter-second"));
+
+        let blueprint = select_provider_for_use_case(&root, &["blueprint"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(blueprint.id.as_deref(), Some("blueprint-first"));
+
+        assert!(select_provider_for_use_case(&root, &["facts"])
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
     fn imports_reference_file_into_project_knowledge_folder() {
         let (temp, root) = create_temp_project(1);
         let source = temp.path().join("外部资料.md");

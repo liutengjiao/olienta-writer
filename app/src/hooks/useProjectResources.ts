@@ -633,8 +633,10 @@ export function useProjectResources({
         frameworkContent,
       )
       setFrameworkPath(saved.relative_path)
+      setFrameworkContent(saved.content)
       setAssistantState('框架文件已保存')
       setMessage(`${saved.relative_path} 已保存，会进入后续任务书。`)
+      await loadMarkdownFiles(project.root_path)
     } catch (error) {
       setAssistantState('保存失败')
       setMessage(errorToString(error))

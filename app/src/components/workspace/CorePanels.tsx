@@ -60,9 +60,14 @@ export function FrameworkPanel(props: WorkspaceProps) {
     <MarkdownDocument
       title={VIEW_TITLES[props.activeView] ?? '框架文件'}
       path={path}
-      value={props.frameworkContent || props.markdownPreview}
-      onChange={props.onChangeMarkdownPreview}
-      onSave={() => props.onSaveModuleMarkdownFile(path, props.markdownPreview || props.frameworkContent)}
+      value={props.frameworkContent}
+      onChange={props.onChangeFrameworkContent}
+      onSave={props.onSaveFrameworkFile}
+      actions={
+        <>
+          <button className="ghost-button" onClick={props.onGenerateFrameworkDraft}>生成草案</button>
+        </>
+      }
     />
   )
 }

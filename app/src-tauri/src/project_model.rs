@@ -4951,6 +4951,98 @@ mod tests {
     }
 
     #[test]
+    fn writing_flow_keeps_candidate_author_gated_until_confirmed_save() {
+        let (_temp, root) = create_temp_project(1);
+
+        save_module_markdown_file(
+            root.to_string_lossy().to_string(),
+            "facts/confirmed-facts.md".to_owned(),
+            "# 已确认事实\n\n- 主角只能在作者确认后改变既定关系。".to_owned(),
+        )
+        .unwrap();
+        save_author_input(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            "# 第一章作者输入\n\n必须写到本地资料里的“雨夜收据”。".to_owned(),
+        )
+        .unwrap();
+        save_blueprint(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            "# 第一章蓝图\n\n## 本章目标\n\n主角发现第一条可验证线索。\n\n## 禁止提前发生\n\n不得直接揭示最终真相。".to_owned(),
+        )
+        .unwrap();
+
+        let brief = pin_search_result_to_writing_brief(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            "knowledge/markdown/imported/source.md".to_owned(),
+            7,
+            "雨夜收据显示转账时间早于公开说法。".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(brief.relative_path, "tasks/writing-briefs/001.md");
+        assert!(brief.content.contains("Pinned Search Context"));
+        assert!(brief.content.contains("雨夜收据"));
+
+        let pinned = list_pinned_context(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        assert_eq!(pinned.len(), 1);
+        assert_eq!(pinned[0].source_path, "knowledge/markdown/imported/source.md");
+
+        let draft = generate_candidate_draft(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        assert_eq!(draft.relative_path, "manuscript/candidates/001.md");
+        assert_eq!(draft.writing_brief_path, "tasks/writing-briefs/001.md");
+        assert!(draft.review_path.ends_with("001.md"));
+        assert!(draft.content.contains("Candidate Draft"));
+
+        let before_adoption =
+            fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap();
+        assert!(!before_adoption.contains("Candidate Draft"));
+
+        let confirmation = record_candidate_adoption(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            "replace".to_owned(),
+            draft.relative_path.clone(),
+            "manuscript/chapters/001.md".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(confirmation.relative_path, "logs/confirmations/001.md");
+        assert!(confirmation.content.contains("采用方式：replace"));
+
+        save_chapter(
+            root.to_string_lossy().to_string(),
+            "001".to_owned(),
+            draft.content.clone(),
+        )
+        .unwrap();
+        let confirmed = load_chapter(root.to_string_lossy().to_string(), "001".to_owned()).unwrap();
+        assert!(confirmed.content.contains("Candidate Draft"));
+        assert!(fs::read_to_string(root.join("facts/author-confirmation.md"))
+            .unwrap()
+            .contains("001"));
+
+        let exported = export_manuscript(ExportInput {
+            root_path: root.to_string_lossy().to_string(),
+            format: "markdown".to_owned(),
+            scope: Some("chapter".to_owned()),
+            chapter_id: Some("001".to_owned()),
+            chapter_ids: None,
+        })
+        .unwrap();
+        assert_eq!(exported.relative_path, "exports/chapter-001.md");
+        assert!(exported.content.contains("Candidate Draft"));
+
+        let events = fs::read_to_string(root.join("logs/system-events.jsonl")).unwrap();
+        assert!(events.contains("candidate_adopted"));
+        assert!(events.contains("chapter_saved"));
+        let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
+        assert!(task_history.contains("search_result_pinned_to_brief"));
+        assert!(task_history.contains("writing_brief_composed"));
+        assert!(task_history.contains("candidate_draft_generated"));
+    }
+
+    #[test]
     fn blueprint_draft_generation_does_not_save_file() {
         let (_temp, root) = create_temp_project(2);
         let before = fs::read_to_string(root.join("blueprints/chapters/001.md")).unwrap();

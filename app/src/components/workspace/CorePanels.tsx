@@ -79,7 +79,7 @@ export function BlueprintPanel(props: WorkspaceProps) {
         onSave={props.onSaveBlueprint}
         actions={
           <>
-            <button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成草案</button>
+            <button className="ghost-button" onClick={props.onGenerateBlueprintDraft}>生成草稿</button>
             <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
           </>
         }

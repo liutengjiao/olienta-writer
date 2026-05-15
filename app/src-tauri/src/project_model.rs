@@ -3479,18 +3479,57 @@ fn write_candidate_review_report(
 ) -> Result<String, ProjectError> {
     let relative_path = format!("manuscript/candidates/reviews/{chapter_id}.md");
     let mut content = format!(
-        "# Candidate Review {chapter_id}\n\n- candidate: `{candidate_path}`\n- brief: `{brief_path}`\n\n"
+        "# 第 {chapter_id} 章候选稿审查\n\n- 候选稿：`{candidate_path}`\n- 任务书：`{brief_path}`\n\n"
     );
-    content.push_str("### Warnings\n\n");
+    content.push_str("## 审查清单\n\n");
     if warnings.is_empty() {
-        content.push_str("- No warnings.\n");
+        content.push_str("- 暂无审查提醒。\n");
     } else {
-        for warning in warnings {
-            content.push_str(&format!("- {warning}\n"));
+        for (title, items) in grouped_candidate_warnings(warnings) {
+            content.push_str(&format!("### {title}\n\n"));
+            for warning in items {
+                content.push_str(&format!("- {warning}\n"));
+            }
+            content.push('\n');
         }
     }
     atomic_write_text(&ensure_project_path(root, &relative_path)?, &content)?;
     Ok(relative_path)
+}
+
+fn grouped_candidate_warnings(warnings: &[String]) -> Vec<(&'static str, Vec<&String>)> {
+    let groups = [
+        ("时间线与里程碑", "时间线|里程碑|提前触发"),
+        ("章节蓝图", "蓝图|本章必须|禁区"),
+        ("事实库与禁写规则", "事实|禁写"),
+        ("角色边界", "角色"),
+        ("钉选材料", "钉选材料"),
+        ("伏笔与回收", "伏笔"),
+        ("生成与任务书", "生成来源|写作任务书|AI 调用降级"),
+        ("文本质量", ""),
+    ];
+    let mut output = groups
+        .iter()
+        .map(|(title, _)| (*title, Vec::new()))
+        .collect::<Vec<_>>();
+
+    for warning in warnings {
+        let index = groups
+            .iter()
+            .position(|(_, pattern)| {
+                pattern.is_empty()
+                    || pattern
+                        .split('|')
+                        .any(|keyword| !keyword.is_empty() && warning.contains(keyword))
+            })
+            .unwrap_or(groups.len() - 1);
+        output[index].1.push(warning);
+    }
+
+    output
+        .into_iter()
+        .filter(|(_, items)| !items.is_empty())
+        .collect()
 }
 
 fn collect_labeled_lines(content: &str, labels: &[&str]) -> Vec<String> {
@@ -4999,6 +5038,9 @@ mod tests {
         assert_eq!(draft.writing_brief_path, "tasks/writing-briefs/001.md");
         assert!(draft.review_path.ends_with("001.md"));
         assert!(draft.content.contains("Candidate Draft"));
+        let review_report = fs::read_to_string(root.join(&draft.review_path)).unwrap();
+        assert!(review_report.contains("# 第 001 章候选稿审查"));
+        assert!(review_report.contains("### 生成与任务书"));
 
         let before_adoption =
             fs::read_to_string(root.join("manuscript/chapters/001.md")).unwrap();

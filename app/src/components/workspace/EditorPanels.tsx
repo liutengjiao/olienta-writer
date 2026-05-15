@@ -1,11 +1,30 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { WorkspaceProps } from './types'
+
+type ReviewGroup = {
+  key: string
+  title: string
+  tone: 'danger' | 'warning' | 'info'
+  items: string[]
+}
+
+const REVIEW_GROUPS: Array<Omit<ReviewGroup, 'items'> & { match: (warning: string) => boolean }> = [
+  { key: 'timeline', title: '时间线与里程碑', tone: 'danger', match: (warning) => warning.includes('时间线') || warning.includes('里程碑') || warning.includes('提前触发') },
+  { key: 'blueprint', title: '章节蓝图', tone: 'danger', match: (warning) => warning.includes('蓝图') || warning.includes('本章必须') || warning.includes('禁区') },
+  { key: 'facts', title: '事实库与禁写规则', tone: 'danger', match: (warning) => warning.includes('事实') || warning.includes('禁写') },
+  { key: 'characters', title: '角色边界', tone: 'warning', match: (warning) => warning.includes('角色') },
+  { key: 'pinned', title: '钉选材料', tone: 'warning', match: (warning) => warning.includes('钉选材料') },
+  { key: 'loops', title: '伏笔与回收', tone: 'warning', match: (warning) => warning.includes('伏笔') },
+  { key: 'generation', title: '生成与任务书', tone: 'info', match: (warning) => warning.includes('生成来源') || warning.includes('写作任务书') || warning.includes('AI 调用降级') },
+  { key: 'quality', title: '文本质量', tone: 'info', match: () => true },
+]
 
 export function DraftPanel(props: WorkspaceProps) {
   const candidateUnits = estimateTextUnits(props.candidate)
   const manuscriptUnits = estimateTextUnits(props.manuscript)
   const candidateParagraphs = countParagraphs(props.candidate)
   const manuscriptParagraphs = countParagraphs(props.manuscript)
+  const reviewGroups = groupCandidateWarnings(props.candidateWarnings)
 
   return (
     <section className="draft-workspace">
@@ -69,12 +88,25 @@ export function DraftPanel(props: WorkspaceProps) {
         {props.candidateWarnings.length > 0 && (
           <section className="warning-list">
             <div className="card-heading">
-              <h2>审查提醒</h2>
+              <div>
+                <h2>审查清单</h2>
+                <p>按风险来源分组；提示不会阻止采用，最终决定仍由作者确认。</p>
+              </div>
               <span>{props.candidateWarnings.length}</span>
             </div>
-            <ul>
-              {props.candidateWarnings.map((warning) => <li key={warning}>{warning}</li>)}
-            </ul>
+            <div className="candidate-review-groups">
+              {reviewGroups.map((group) => (
+                <article className={`candidate-review-group ${group.tone}`} key={group.key}>
+                  <div className="candidate-review-group-head">
+                    <strong>{group.title}</strong>
+                    <span>{group.items.length}</span>
+                  </div>
+                  <ul>
+                    {group.items.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </article>
+              ))}
+            </div>
           </section>
         )}
       </div>
@@ -195,7 +227,7 @@ export function ManuscriptPanel(props: WorkspaceProps) {
             <h2>Memory</h2>
             <span>{props.openLoopsPath}</span>
           </div>
-          <p className="empty-note">事实和伏笔都存为普通 Markdown 文件，作者可以直接查看和编辑。</p>
+          <p className="empty-note">事实和伏笔都保存为普通 Markdown 文件，作者可以直接查看和编辑。</p>
           <div className="editor-actions">
             <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.confirmedFactsPath)}>事实库</button>
             <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.openLoopsPath)}>伏笔</button>
@@ -224,7 +256,7 @@ export function MarkdownDocument(props: {
   value: string
   onChange: (value: string) => void
   onSave: () => void
-  actions?: React.ReactNode
+  actions?: ReactNode
 }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
   return (
@@ -275,6 +307,19 @@ export function FocusMode(props: WorkspaceProps) {
       <textarea value={props.manuscript} onChange={(event) => props.onChangeManuscript(event.target.value)} />
     </section>
   )
+}
+
+function groupCandidateWarnings(warnings: string[]): ReviewGroup[] {
+  const groups = REVIEW_GROUPS.map((group) => ({ ...group, items: [] as string[] }))
+
+  for (const warning of warnings) {
+    const group = groups.find((item) => item.match(warning)) ?? groups[groups.length - 1]
+    group.items.push(warning)
+  }
+
+  return groups
+    .filter((group) => group.items.length > 0)
+    .map(({ key, title, tone, items }) => ({ key, title, tone, items }))
 }
 
 function formatBytes(bytes: number) {

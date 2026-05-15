@@ -29,7 +29,7 @@ export function Workspace(props: Props) {
   const title = VIEW_TITLES[props.activeView] ?? MODULE_TITLES[props.activeModule] ?? 'Olienta'
   const subtitle = props.project
     ? props.project.root_path
-    : '本地优先写作工作台。打开或创建项目后，直接编辑本地 Markdown 文件。'
+    : '本地优先写作工作台。打开或创建项目后，可以直接编辑本地 Markdown 文件。'
 
   return (
     <section className="workspace" aria-label="Olienta workspace">

@@ -4852,6 +4852,9 @@ fn is_editable_module_markdown(relative_path: &str) -> bool {
     if relative_path.starts_with("characters/cards/") && relative_path.ends_with(".md") {
         return true;
     }
+    if relative_path.starts_with("tasks/writing-briefs/") && relative_path.ends_with(".md") {
+        return true;
+    }
 
     matches!(
         relative_path,
@@ -4933,6 +4936,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(saved_fact.relative_path, "facts/character-facts.md");
+
+        let saved_brief = save_module_markdown_file(
+            root.to_string_lossy().to_string(),
+            "tasks/writing-briefs/001.md".to_owned(),
+            "# 第001章 写作任务书\n\n- 作者手动补充任务边界。\n".to_owned(),
+        )
+        .unwrap();
+        assert_eq!(saved_brief.relative_path, "tasks/writing-briefs/001.md");
+        assert!(saved_brief.content.contains("作者手动补充任务边界"));
 
         let blocked = save_module_markdown_file(
             root.to_string_lossy().to_string(),

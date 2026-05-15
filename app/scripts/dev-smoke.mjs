@@ -30,7 +30,7 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/DocumentPanels.tsx',
-    includes: ['章节任务书', '导出', '模型调用'],
+    includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '导出', '模型调用'],
   },
   {
     path: '/src/components/workspace/KnowledgePanels.tsx',

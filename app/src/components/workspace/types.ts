@@ -1,5 +1,6 @@
 import type {
   BlueprintHistorySummary,
+  ChapterSummary,
   CreateProjectInput,
   MarkdownFileSummary,
   ModuleKey,
@@ -9,23 +10,24 @@ import type {
   ProjectSearchResult,
   ProjectSummary,
   ProjectVaultEntry,
+  RecentProject,
   SkillFileSummary,
   TaskItem,
+  TimelineSettings,
   ViewKey,
 } from '../../types'
 
 export type WorkspaceProps = {
-  [key: string]: unknown
   activeView: ViewKey
   activeModule: ModuleKey
   activeModuleView: ModuleSubViewKey
   focusMode: boolean
   project: ProjectSummary | null
-  recentProjects: unknown[]
+  recentProjects: RecentProject[]
   form: CreateProjectInput
   busy: boolean
-  currentChapter: { id: string; title: string; word_count?: number; state?: string }
-  chapters: Array<{ id: string; title: string; word_count?: number; state?: string }>
+  currentChapter: ChapterSummary
+  chapters: ChapterSummary[]
   selectedChapterId: string
   chapterPath: string
   manuscript: string
@@ -35,6 +37,10 @@ export type WorkspaceProps = {
   frameworkContent: string
   blueprintPath: string
   blueprint: string
+  blueprintHistory: BlueprintHistorySummary[]
+  selectedBlueprintHistoryPath: string
+  blueprintHistoryPreview: string
+  authorInputPath: string
   authorInput: string
   writingBrief: string
   writingBriefPath: string
@@ -49,6 +55,9 @@ export type WorkspaceProps = {
   confirmedFactsPath: string
   openLoops: string
   openLoopsPath: string
+  timelineEvents: string
+  timelineEventsPath: string
+  timelineSettings: TimelineSettings
   markdownFiles: MarkdownFileSummary[]
   projectVaultEntries: ProjectVaultEntry[]
   projectHealth: ProjectHealthReport | null
@@ -63,6 +72,7 @@ export type WorkspaceProps = {
   providerTestMessage: string
   lastExportedPath: string
   tasks: TaskItem[]
+  onImportProject: () => void
   onUpdateForm: <Key extends keyof CreateProjectInput>(key: Key, value: CreateProjectInput[Key]) => void
   onChooseFolder: () => void
   onOpenProject: () => void
@@ -70,11 +80,16 @@ export type WorkspaceProps = {
   onOpenExport: () => void
   onOpenSampleProject: () => void
   onCreateProject: () => void
+  onSaveFrameworkFile: () => void
+  onChangeFrameworkContent: (content: string) => void
+  onGenerateFrameworkDraft: () => void
   onLoadMarkdownFile: (relativePath: string) => void
   onLoadBlueprintHistory: (relativePath: string) => void
   onLoadCandidateHistory: (relativePath: string) => void
   onChangeConfirmedFacts: (content: string) => void
   onChangeOpenLoops: (content: string) => void
+  onChangeTimelineEvents: (content: string) => void
+  onSaveTimelineEvents: () => void
   onSaveKnowledgeFile: (kind: 'confirmed-facts' | 'open-loops') => void
   onRepairProjectStructure: () => void
   onRevealProjectFolder: () => void
@@ -93,6 +108,10 @@ export type WorkspaceProps = {
   onChangeBlueprint: (content: string) => void
   onSaveBlueprint: () => void
   onGenerateBlueprintDraft: () => void
+  onRegenerateAllBlueprints: () => void
+  onRegenerateFollowingBlueprints: () => void
+  onSaveAuthorInput: () => void
+  onChangeAuthorInput: (content: string) => void
   onComposeBrief: () => void
   onChangeWritingBrief: (content: string) => void
   onGenerateCandidate: () => void

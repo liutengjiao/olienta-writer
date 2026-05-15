@@ -289,7 +289,7 @@ export function ChapterList(props: WorkspaceProps) {
         >
           <span>{chapter.id}</span>
           <strong>{chapter.title}</strong>
-          <small>{chapter.word_count ?? 0} 字</small>
+          <small>{chapter.words} 字</small>
         </button>
       ))}
     </aside>

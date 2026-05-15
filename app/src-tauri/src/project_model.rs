@@ -1220,7 +1220,7 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
     let result: ProviderTestResult = match select_chapter_provider(&root) {
         Ok(Some(provider)) => {
             let label = provider_label(&provider);
-            match call_openai_compatible(&provider, "璇峰彧鍥炲锛歄lienta connection ok") {
+            match call_openai_compatible(&provider, "只回复：Olienta connection ok") {
                 Ok(content) => ProviderTestResult {
                     ok: true,
                     provider: label,
@@ -1236,7 +1236,7 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
         Ok(None) => ProviderTestResult {
             ok: false,
             provider: "none".to_owned(),
-            message: "娌℃湁鍚敤鐨?OpenAI-compatible Provider".to_owned(),
+            message: "没有启用的 OpenAI-compatible Provider。".to_owned(),
         },
         Err(error) => ProviderTestResult {
             ok: false,
@@ -2713,23 +2713,23 @@ fn safe_character_file_stem(name: &str) -> String {
 }
 
 fn render_character_card(card: &ExtractedCharacterCard, source_path: &str) -> String {
-    let role = card.role_label.as_deref().unwrap_or("???");
-    let identity = extract_labeled_value(&card.body, &["??", "???", "???"]);
-    let desire = extract_labeled_value(&card.body, &["??", "????", "??"]);
-    let fear = extract_labeled_value(&card.body, &["??", "??", "??"]);
-    let boundary = extract_labeled_value(&card.body, &["??????", "????", "????"]);
-    let marker = extract_labeled_value(&card.body, &["?????", "??????", "???"]);
+    let role = card.role_label.as_deref().unwrap_or("未标注");
+    let identity = extract_labeled_value(&card.body, &["身份", "职业", "位置"]);
+    let desire = extract_labeled_value(&card.body, &["欲望", "核心欲望", "目标"]);
+    let fear = extract_labeled_value(&card.body, &["恐惧", "害怕", "风险"]);
+    let boundary = extract_labeled_value(&card.body, &["边界", "底线", "禁忌"]);
+    let marker = extract_labeled_value(&card.body, &["物证标志物", "标志物", "道具"]);
 
     format!(
-        "# {name}\n\n         ???{source_path}\n\n         ## ????\n\n         - ?????{heading}\n         - ?????{role}\n         - ???{identity}\n\n         ## ?????\n\n         - ???{desire}\n         - ???{fear}\n\n         ## ?????\n\n         - ????/??????{boundary}\n         - ??????{marker}\n\n         ## ????\n\n{body}\n",
+        "# {name}\n\n来源：{source_path}\n\n## 基础信息\n\n- 原始标题：{heading}\n- 角色标签：{role}\n- 身份：{identity}\n\n## 欲望与风险\n\n- 欲望：{desire}\n- 恐惧：{fear}\n\n## 写作边界\n\n- 边界/禁忌：{boundary}\n- 物证标志物：{marker}\n\n## 原始材料\n\n{body}\n",
         name = card.name,
         heading = card.heading,
         role = role,
-        identity = identity.unwrap_or_else(|| "?????".to_owned()),
-        desire = desire.unwrap_or_else(|| "?????".to_owned()),
-        fear = fear.unwrap_or_else(|| "?????".to_owned()),
-        boundary = boundary.unwrap_or_else(|| "?????".to_owned()),
-        marker = marker.unwrap_or_else(|| "?????".to_owned()),
+        identity = identity.unwrap_or_else(|| "未提取".to_owned()),
+        desire = desire.unwrap_or_else(|| "未提取".to_owned()),
+        fear = fear.unwrap_or_else(|| "未提取".to_owned()),
+        boundary = boundary.unwrap_or_else(|| "未提取".to_owned()),
+        marker = marker.unwrap_or_else(|| "未提取".to_owned()),
         body = card.body.trim()
     )
 }
@@ -2773,7 +2773,7 @@ fn extract_character_relation_lines(
             let mentions_other = cards
                 .iter()
                 .any(|card| card.name != current_name && clean.contains(&card.name));
-            (mentions_other || clean.contains('?') || clean.contains("??"))
+            (mentions_other || clean.contains("关系") || clean.contains("互动"))
                 .then(|| clean.to_owned())
         })
         .take(12)
@@ -2782,15 +2782,15 @@ fn extract_character_relation_lines(
 
 fn extract_character_growth_lines(body: &str) -> Vec<String> {
     let keywords = [
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "?????",
-        "????",
-        "??",
+        "成长",
+        "变化",
+        "转变",
+        "代价",
+        "选择",
+        "动机",
+        "关键节点",
+        "弧光",
+        "目标",
     ];
     body.lines()
         .filter_map(|line| {
@@ -3049,24 +3049,24 @@ fn analyze_skill_conflicts_for_root(root: &Path) -> Result<Vec<String>, ProjectE
 
     let content = active_chunks.join("\n").to_ascii_lowercase();
     let mut warnings = Vec::new();
-    if (content.contains("????") || content.contains("first person"))
-        && (content.contains("????") || content.contains("third person"))
+    if (content.contains("第一人称") || content.contains("first person"))
+        && (content.contains("第三人称") || content.contains("third person"))
     {
-        warnings.push("???????????????????????".to_owned());
+        warnings.push("存在第一人称和第三人称同时启用的写法规则，请确认叙事视角。".to_owned());
     }
-    if (content.contains("???") || content.contains("???") || content.contains("??"))
-        && (content.contains("???") || content.contains("??") || content.contains("??"))
+    if (content.contains("快节奏") || content.contains("爽点") || content.contains("强推进"))
+        && (content.contains("慢节奏") || content.contains("留白") || content.contains("文学性"))
     {
-        warnings.push("??????????????/??????/?????".to_owned());
+        warnings.push("存在快节奏/爽点与慢节奏/留白并存的 Skill，请确认本章节奏。".to_owned());
     }
-    if (content.contains("????") || content.contains("????"))
-        && (content.contains("???") || content.contains("??") || content.contains("???"))
+    if (content.contains("严格遵循") || content.contains("不得改动"))
+        && (content.contains("自由发挥") || content.contains("改写") || content.contains("即兴"))
     {
-        warnings.push("???????????????????/????????????".to_owned());
+        warnings.push("存在严格遵循与自由发挥并存的 Skill，请确认 AI 的改写边界。".to_owned());
     }
 
     if warnings.is_empty() && !active_chunks.is_empty() {
-        warnings.push("?????? Skill ???".to_owned());
+        warnings.push("已加载 Skill，未发现明显冲突。".to_owned());
     }
 
     Ok(warnings)
@@ -3096,18 +3096,18 @@ fn read_selected_skills(root: &Path) -> Result<String, ProjectError> {
             }
             let content = fs::read_to_string(&path).unwrap_or_default();
             let scope = if temporary.contains(&safe_name) {
-                "????"
+                "临时启用"
             } else {
-                "????"
+                "已选择"
             };
-            chunks.push(format!("## {name}?{scope}?\n\n{content}"));
+            chunks.push(format!("## {name}（{scope}）\n\n{content}"));
         }
     }
 
     chunks.sort();
 
     if chunks.is_empty() {
-        Ok("????? Skill?".to_owned())
+        Ok("没有启用的 Skill。".to_owned())
     } else {
         Ok(chunks.join("\n\n---\n\n"))
     }
@@ -3161,13 +3161,13 @@ fn read_character_context(root: &Path) -> Result<String, ProjectError> {
     card_chunks.sort();
     if !card_chunks.is_empty() {
         chunks.push(format!(
-            "## ??????\n\n{}",
+            "## 独立角色卡\n\n{}",
             card_chunks.join("\n\n---\n\n")
         ));
     }
 
     if chunks.is_empty() {
-        Ok("???????????????????????".to_owned())
+        Ok("还没有可用的角色上下文。".to_owned())
     } else {
         Ok(chunks.join("\n\n---\n\n"))
     }
@@ -3183,7 +3183,7 @@ fn read_timeline_context(root: &Path) -> Result<String, ProjectError> {
     let milestones = read_optional_project_file(root, "timeline/milestones.md")?;
 
     if !timeline_constraints_enabled(root)? {
-        return Ok("Timeline Pro ???????????????????????????????? AI ???????????timeline/events.md?timeline/milestones.md?".to_owned());
+        return Ok("Timeline Pro 未启用，当前不会进行时间线冲突检查。AI 仍可读取 timeline/events.md 与 timeline/milestones.md。".to_owned());
     }
 
     let mut chunks = Vec::new();
@@ -3195,7 +3195,7 @@ fn read_timeline_context(root: &Path) -> Result<String, ProjectError> {
     }
 
     if chunks.is_empty() {
-        Ok("Timeline Pro ?????????????????????".to_owned())
+        Ok("Timeline Pro 已启用，但还没有可用的时间线内容。".to_owned())
     } else {
         Ok(chunks.join("\n\n---\n\n"))
     }
@@ -3233,7 +3233,7 @@ fn rescan_facts_for_root(root: &Path) -> Result<(), ProjectError> {
                 .file_stem()
                 .and_then(|value| value.to_str())
                 .unwrap_or("unknown");
-            let title = extract_title(&content).unwrap_or_else(|| "?????".to_owned());
+            let title = extract_title(&content).unwrap_or_else(|| "未命名章节".to_owned());
             facts.extend(extract_chapter_facts(chapter_id, &title, &content));
         }
     }
@@ -3241,11 +3241,11 @@ fn rescan_facts_for_root(root: &Path) -> Result<(), ProjectError> {
     facts.sort();
     facts.dedup();
 
-    let mut output = "# ?????\n\n".to_owned();
+    let mut output = "# 已确认事实\n\n".to_owned();
     if facts.is_empty() {
-        output.push_str("????????\n");
+        output.push_str("暂无可重扫事实。\n");
     } else {
-        output.push_str("??????????????AI ???????\n\n");
+        output.push_str("以下事实来自已保存正文，后续 AI 生成必须尊重。\n\n");
         output.push_str(&facts.join("\n"));
         output.push('\n');
     }
@@ -3278,35 +3278,35 @@ fn backup_confirmed_facts(root: &Path, facts_path: &Path) -> Result<(), ProjectE
 
 fn extract_chapter_facts(chapter_id: &str, title: &str, content: &str) -> Vec<String> {
     let mut facts = vec![format!(
-        "- {chapter_id}?{title}??????????AI ????????????"
+        "- {chapter_id}《{title}》已保存为作者确认正文，后续 AI 生成必须尊重。"
     )];
 
-    for name in ["???", "????", "???", "???", "???"] {
+    for name in ["杨志远", "王静", "欧阳", "苏青", "国叶儿"] {
         if content.contains(name) {
-            facts.push(format!("- {chapter_id} ?????{name}?"));
+            facts.push(format!("- {chapter_id} 出现角色：{name}。"));
         }
     }
 
     for year in 2017..=2024 {
         let year_text = year.to_string();
         if content.contains(&year_text) {
-            facts.push(format!("- {chapter_id} ?????{year_text}?"));
+            facts.push(format!("- {chapter_id} 提到年份：{year_text}。"));
         }
     }
 
     for keyword in [
-        "??",
-        "??",
-        "???",
-        "??",
-        "??",
-        "???",
-        "??",
-        "??",
+        "广州",
+        "上海",
+        "深圳",
+        "手术",
+        "股权",
+        "诊所",
+        "现金",
+        "病历",
         "CBD",
     ] {
         if content.contains(keyword) {
-            facts.push(format!("- {chapter_id} ?????{keyword}?"));
+            facts.push(format!("- {chapter_id} 提到关键词：{keyword}。"));
         }
     }
 
@@ -3543,26 +3543,26 @@ fn load_chapter_side_file(
 
 fn review_candidate_content(content: &str) -> Vec<String> {
     let mut warnings = Vec::new();
-    let cliche_words = ["??", "??", "??", "????", "??????"];
+    let cliche_words = ["突然", "然后", "其实", "命运", "无法言说"];
 
     for word in cliche_words {
         if content.matches(word).count() >= 2 {
             warnings.push(format!(
-                "AI ????{word} ?????????????????"
+                "候选稿多次使用“{word}”，建议检查是否有模板化或重复表达。"
             ));
         }
     }
 
-    if content.contains("?????") || content.contains("?????") {
-        warnings.push("AI ????????????????????????????".to_owned());
+    if content.contains("作为一个AI") || content.contains("作为 AI") {
+        warnings.push("候选稿出现 AI 自我说明，请删除元叙事痕迹。".to_owned());
     }
 
     if count_words(content) < 500 {
-        warnings.push("???????????????????????".to_owned());
+        warnings.push("候选稿明显偏短，可能不是完整章节。".to_owned());
     }
 
-    if !content.contains('?') && !content.contains('?') && !content.contains("???") {
-        warnings.push("????????????????????????".to_owned());
+    if !content.contains('？') && !content.contains('?') && !content.contains("为什么") {
+        warnings.push("候选稿缺少显性问题或张力句，建议检查章节推进力。".to_owned());
     }
 
     warnings
@@ -3614,30 +3614,30 @@ fn review_candidate_with_context(
 fn review_candidate_against_blueprint(content: &str, blueprint: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     if blueprint.trim().is_empty() {
-        warnings.push("?????????????????????????".to_owned());
+        warnings.push("当前章节蓝图为空，候选稿缺少结构约束。".to_owned());
         return warnings;
     }
 
     let forbidden = collect_labeled_lines(
         blueprint,
-        &["????", "????", "????", "????", "??"],
+        &["禁止提前发生", "不得提前", "不能发生", "禁止", "边界"],
     );
     for keyword in extract_keywords_from_lines(&forbidden) {
         if !keyword.is_empty() && content.contains(&keyword) {
             warnings.push(format!(
-                "?????????? {keyword}????????????????????"
+                "候选稿可能触碰蓝图禁区：“{keyword}”，请确认是否提前泄露。"
             ));
         }
     }
 
     let must_happen = collect_labeled_lines(
         blueprint,
-        &["????", "????", "????", "???"],
+        &["必须发生", "本章目标", "关键动作", "必须写到"],
     );
     for keyword in extract_keywords_from_lines(&must_happen).into_iter().take(6) {
         if keyword.chars().count() >= 2 && !content.contains(&keyword) {
             warnings.push(format!(
-                "????????????? {keyword}?????????????????"
+                "候选稿可能遗漏本章必须发生内容：“{keyword}”。"
             ));
         }
     }
@@ -3662,22 +3662,22 @@ fn review_candidate_against_constraints(
             .iter()
             .filter(|keyword| content.contains(keyword.as_str()))
             .count();
-        if hits > 0 && (line.contains("??") || line.contains("??") || line.contains("??")) {
+        if hits > 0 && (line.contains("禁止") || line.contains("不得") || line.contains("不能")) {
             warnings.push(format!(
-                "???????????? {}?????????????????",
+                "候选稿可能违反事实或禁写规则：{}",
                 trim_for_status(&line)
             ));
         }
-        if hits > 0 && contains_negation(content) && line.contains("???") {
+        if hits > 0 && contains_negation(content) && line.contains("必须") {
             warnings.push(format!(
-                "??????????????????????? {}?",
+                "候选稿可能否定了必须保持的事实：{}",
                 trim_for_status(&line)
             ));
         }
     }
 
     if !open_loops.trim().is_empty() && contains_resolution(content) {
-        warnings.push("??????????????/???????????????????????".to_owned());
+        warnings.push("候选稿可能提前解开未闭合伏笔，请确认是否符合章节节奏。".to_owned());
     }
 
     warnings
@@ -3688,7 +3688,7 @@ fn review_candidate_against_character_context(
     character_context: &str,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    if character_context.trim().is_empty() || character_context.contains("????????") {
+    if character_context.trim().is_empty() || character_context.contains("还没有可用的角色上下文") {
         return warnings;
     }
 
@@ -3703,20 +3703,19 @@ fn review_candidate_against_character_context(
     for name in mentioned_cards {
         let section = character_section_from_context(character_context, &name);
         for line in constraint_lines(&section).into_iter().take(12) {
-            let is_boundary = line.contains("????")
-                || line.contains("????")
-                || line.contains("????")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("?????")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??")
-                || line.contains("??");
+            let is_boundary = line.contains("边界")
+                || line.contains("禁忌")
+                || line.contains("恐惧")
+                || line.contains("欲望")
+                || line.contains("不能")
+                || line.contains("不得")
+                || line.contains("必须")
+                || line.contains("底线")
+                || line.contains("关系")
+                || line.contains("动机")
+                || line.contains("策略")
+                || line.contains("身份")
+                || line.contains("目标");
 
             if !is_boundary {
                 continue;
@@ -3729,12 +3728,12 @@ fn review_candidate_against_character_context(
                 .count();
             if hits == 0 {
                 warnings.push(format!(
-                    "?????????? {name}???????????? {}?",
+                    "候选稿提到角色“{name}”，但可能未体现角色约束：{}",
                     trim_for_status(&line)
                 ));
             } else if contains_negation(content) {
                 warnings.push(format!(
-                    "?????????????????? {name} ?????? {}?",
+                    "候选稿可能否定角色“{name}”的既定设定：{}",
                     trim_for_status(&line)
                 ));
             }
@@ -3761,14 +3760,14 @@ fn review_candidate_against_pinned_context(content: &str, pinned_context: &str) 
             .count();
         if hits == 0 {
             warnings.push(format!(
-                "????????????????????? {}??? {}:{}?",
+                "候选稿可能遗漏钉选材料：{}，来源 {}:{}",
                 trim_for_status(&item.snippet),
                 item.source_path,
                 item.line_number
             ));
         } else if contains_negation(content) {
             warnings.push(format!(
-                "??????????????????????????? {}?????????????",
+                "候选稿可能否定钉选材料：{}",
                 trim_for_status(&item.snippet)
             ));
         }
@@ -3791,14 +3790,14 @@ fn review_candidate_against_timeline(
             .map(|chapter| current_chapter > 0 && chapter > current_chapter)
             .unwrap_or(false);
         let is_timeline_boundary = is_future_milestone
-            || line.contains("????")
-            || line.contains("????")
-            || line.contains("????")
-            || line.contains("???")
-            || line.contains("??")
-            || line.contains("??")
-            || line.contains("??")
-            || line.contains("??");
+            || line.contains("不得提前")
+            || line.contains("禁止提前")
+            || line.contains("未来")
+            || line.contains("后续")
+            || line.contains("第")
+            || line.contains("章")
+            || line.contains("里程碑")
+            || line.contains("时间线");
 
         if !is_timeline_boundary {
             continue;
@@ -3813,7 +3812,7 @@ fn review_candidate_against_timeline(
 
         if hits > 0 || (is_future_milestone && resolution_hit) {
             warnings.push(format!(
-                "??????????????????/??? {}???????????????",
+                "候选稿可能提前触发时间线或里程碑：{}",
                 trim_for_status(&line)
             ));
         }
@@ -3888,36 +3887,36 @@ fn constraint_lines(content: &str) -> Vec<String> {
         .filter(|line| {
             line.len() >= 6
                 && !line.starts_with('#')
-                && !line.contains("??")
-                && !line.contains("????")
+                && !line.contains("未提取")
+                && !line.contains("暂无")
         })
         .collect()
 }
 
 fn constraint_keywords(content: &str) -> Vec<String> {
     let stop_words = [
-        "???",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
+        "以及",
+        "一个",
+        "这个",
+        "那个",
+        "没有",
+        "不是",
+        "可以",
+        "需要",
+        "必须",
+        "不得",
+        "不能",
+        "进行",
+        "出现",
+        "角色",
+        "章节",
+        "正文",
+        "候选稿",
+        "蓝图",
+        "材料",
+        "内容",
+        "作者",
+        "已经",
     ];
     let mut keywords = Vec::new();
     let mut current = String::new();
@@ -3930,15 +3929,15 @@ fn constraint_keywords(content: &str) -> Vec<String> {
     }
     push_keyword(&mut keywords, &mut current, &stop_words);
     for term in [
-        "???",
-        "????",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
-        "??",
+        "身份",
+        "欲望",
+        "恐惧",
+        "边界",
+        "禁忌",
+        "底线",
+        "目标",
+        "动机",
+        "关系",
     ] {
         if content.contains(term) {
             keywords.push(term.to_owned());
@@ -3958,19 +3957,19 @@ fn push_keyword(keywords: &mut Vec<String>, current: &mut String, stop_words: &[
 }
 
 fn contains_negation(content: &str) -> bool {
-    ["??", "??", "??", "??", "??", "???"]
+    ["没有", "并非", "不是", "不再", "取消", "不存在"]
         .iter()
         .any(|word| content.contains(word))
 }
 
 fn contains_resolution(content: &str) -> bool {
     [
-        "????",
-        "????",
-        "????",
-        "????",
-        "????",
-        "????",
+        "真相大白",
+        "谜底揭开",
+        "彻底解决",
+        "全部说清",
+        "伏笔收束",
+        "问题解决",
     ]
     .iter()
     .any(|word| content.contains(word))
@@ -4218,7 +4217,7 @@ fn compose_framework_prompt(
     other_frameworks: &str,
 ) -> String {
     format!(
-        "# ????????\n\n         ?????framework/{file_name}\n\n         ## ???\n         1. ??? Markdown ??????? JSON?\n         2. ????????????? AI ???\n         3. ?????????????????????\n         4. ?????????????????????\n\n         ## ????????????\n\n{author_input}\n\n         ## ????????\n\n{current_content}\n\n         ## ?????\n\n{confirmed_facts}\n\n         ## ????????\n\n{other_frameworks}\n\n         ?????????????????? framework/{file_name} ???"
+        "# 框架文档改写任务\n\n         目标文件：framework/{file_name}\n\n         ## 要求\n         1. 只输出 Markdown 正文，不要输出 JSON。\n         2. 保留作者输入中的核心设定，不要替作者做无依据改动。\n         3. 与已确认事实和其他框架文件保持一致。\n         4. 内容要可直接保存为 framework/{file_name}。\n\n         ## 作者输入\n\n{author_input}\n\n         ## 当前文件内容\n\n{current_content}\n\n         ## 已确认事实\n\n{confirmed_facts}\n\n         ## 其他框架参考\n\n{other_frameworks}\n\n         请输出更新后的 framework/{file_name} 内容。"
     )
 }
 
@@ -4229,12 +4228,12 @@ fn local_framework_draft(
 ) -> String {
     let title = framework_title(file_name);
     let reason = fallback_reason
-        .map(|value| format!("\n\n> ????????????{value}"))
+        .map(|value| format!("\n\n> 本地草稿原因：{value}"))
         .unwrap_or_default();
     format!(
-        "# {title}\n{reason}\n\n         ## ??????\n\n{}\n\n         ## AI ????\n\n         - ???????????\n         - ??????? AI ???????????? Markdown?\n         - ???????????????????????????\n\n         ## ???\n         - ????\n         - ???????\n         - ??????\n",
+        "# {title}\n{reason}\n\n         ## 作者输入\n\n{}\n\n         ## AI 待补完\n\n         - 请补齐核心设定。\n         - 请保持 Markdown 结构清晰，不要输出 JSON。\n         - 请与已确认正文和事实库保持一致。\n\n         ## 待确认\n         - 核心设定\n         - 角色/冲突边界\n         - 风格约束\n",
         if author_input.trim().is_empty() {
-            "???????"
+            "暂无作者输入。"
         } else {
             author_input.trim()
         }
@@ -4243,17 +4242,17 @@ fn local_framework_draft(
 
 fn framework_title(file_name: &str) -> &'static str {
     if file_name.contains("premise") {
-        "????"
+        "故事前提"
     } else if file_name.contains("character") {
-        "????"
+        "角色设定"
     } else if file_name.contains("plot") {
-        "????"
+        "情节结构"
     } else if file_name.contains("world") {
-        "???"
+        "世界观"
     } else if file_name.contains("style") {
-        "????"
+        "写作风格"
     } else {
-        "????"
+        "框架文档"
     }
 }
 
@@ -4269,7 +4268,7 @@ fn compose_blueprint_prompt(
     framework: &str,
 ) -> String {
     format!(
-        "# ????????\n\n         ?????{chapter_id}\n\n         ## ???\n         1. ???????? Markdown ?????????????? JSON?\n         2. ???????????????????\n         3. ?????????????????????\n         4. ????????????????????????????\n         5. ???????????????????????????????????????????\n\n         ## ????\n\n{chapter_content}\n\n         ## ??????\n\n{author_input}\n\n         ## ????????\n\n{chapter_author_input}\n\n         ## ????\n\n{current_blueprint}\n\n         ## ???????\n\n{author_confirmation}\n\n         ## ?????\n\n{confirmed_facts}\n\n         ## ?????\n\n{open_loops}\n\n         ## ????\n\n{framework}\n\n         ???????????????????"
+        "# 章节蓝图改写任务\n\n         目标章节：{chapter_id}\n\n         ## 要求\n         1. 只输出章节蓝图 Markdown，不要输出 JSON。\n         2. 明确本章目标、必须发生、禁止提前、伏笔安排和写作提示。\n         3. 尊重已确认正文、事实库和作者确认链。\n         4. 不要提前解决后续章节的冲突或谜题。\n         5. 如果当前正文已有内容，请围绕正文修正蓝图，不要推翻作者确认内容。\n\n         ## 当前正文\n\n{chapter_content}\n\n         ## 全局作者输入\n\n{author_input}\n\n         ## 本章作者输入\n\n{chapter_author_input}\n\n         ## 当前蓝图\n\n{current_blueprint}\n\n         ## 作者确认链\n\n{author_confirmation}\n\n         ## 已确认事实\n\n{confirmed_facts}\n\n         ## 未闭合伏笔\n\n{open_loops}\n\n         ## 框架参考\n\n{framework}\n\n         请输出更新后的章节蓝图。"
     )
 }
 
@@ -4280,12 +4279,12 @@ fn local_blueprint_draft(
 ) -> String {
     let number = chapter_id.parse::<u32>().unwrap_or(1);
     let reason = fallback_reason
-        .map(|value| format!("\n\n> ????????????{value}"))
+        .map(|value| format!("\n\n> 本地草稿原因：{value}"))
         .unwrap_or_default();
     format!(
-        "# ?{number}? ??\n{reason}\n\n         ## ????\n\n         ???????????????????????\n\n         ## ????\n\n         - ??????\n\n         ## ??????\n\n         - ??????????????\n         - ???????????????????????????\n\n         ## ???????\n\n         - ???????????????????\n\n         ## ????\n\n         - ????????????????????\n\n         ## ??????\n\n{}\n\n         ## ?????\n\n         - ???????????????????????????\n",
+        "# 第 {number} 章蓝图\n{reason}\n\n         ## 本章目标\n\n         请根据作者输入补齐本章推进目标。\n\n         ## 必须发生\n\n         - 待补充。\n\n         ## 禁止提前\n\n         - 不要提前解决后续章节冲突。\n         - 不要推翻已确认正文和事实库。\n\n         ## 伏笔安排\n\n         - 待确认本章应埋设或推进的伏笔。\n\n         ## 写作提示\n\n         - 保持角色动机、时间线和钉选材料一致。\n\n         ## 作者输入\n\n{}\n\n         ## 待确认\n\n         - 请作者确认本章目标、关键动作和禁区。\n",
         if author_input.trim().is_empty() {
-            "???????"
+            "暂无作者输入。"
         } else {
             author_input.trim()
         }
@@ -4375,13 +4374,13 @@ fn cascade_following_blueprints(root: &Path, chapter_id: &str) -> Result<(), Pro
 }
 
 fn following_blueprint_template(chapter: u32, source_chapter_id: &str) -> String {
-    let source_label = if source_chapter_id == "??" {
-        "????".to_owned()
+    let source_label = if source_chapter_id == "000" {
+        "前置章节".to_owned()
     } else {
-        format!("? {source_chapter_id} ?????")
+        format!("第 {source_chapter_id} 章更新")
     };
     format!(
-        "# ?{chapter}? ??\n\n         ## ????\n\n         ??{source_label}??????????\n\n         ## ????\n\n         - ??????\n\n         ## ??????\n\n         - ??????????????\n         - ????????????????????????????\n\n         ## ????\n\n         - ??????????????????\n\n         ## ????\n\n         ????????????????????????????\n"
+        "# 第 {chapter} 章蓝图\n\n         ## 级联说明\n\n         因{source_label}，本章蓝图需要重新确认。\n\n         ## 本章目标\n\n         - 待补充。\n\n         ## 必须发生\n\n         - 请根据新的前文状态重新确认。\n         - 不要推翻已确认正文和事实库。\n\n         ## 禁止提前\n\n         - 不要提前解决后续章节冲突。\n\n         ## 写作提示\n\n         请重新装配任务书后再生成候选稿。\n"
     )
 }
 
@@ -4395,15 +4394,15 @@ fn write_blueprint_cascade_log(
         .map(|duration| duration.as_secs())
         .unwrap_or_default();
     let body = if overwritten.is_empty() {
-        "???????????".to_owned()
+        "没有需要级联覆盖的后续蓝图。".to_owned()
     } else {
-        format!("??????????{}?", overwritten.join("?"))
+        format!("已覆盖后续章节蓝图：{}。", overwritten.join("、"))
     };
     let target = ensure_project_path(root, "blueprints/history/last-cascade.md")?;
     atomic_write_text(
         &target,
         &format!(
-            "# ??????\n\n- ?????{chapter_id}\n- ????{timestamp}\n- ???{body}\n"
+            "# 蓝图级联记录\n\n- 来源章节：{chapter_id}\n- 时间戳：{timestamp}\n- 结果：{body}\n"
         ),
     )?;
     append_system_event(
@@ -4556,10 +4555,10 @@ fn update_author_confirmation(root: &Path) -> Result<(), ProjectError> {
                 .find(|line| line.trim_start().starts_with('#'))
                 .map(|line| line.trim_start_matches('#').trim())
                 .filter(|title| !title.is_empty())
-                .unwrap_or("?????");
+                .unwrap_or("未命名章节");
 
             entries.push(format!(
-                "- {chapter_id} {title}?{} ?",
+                "- {chapter_id}《{title}》：{} 字",
                 count_words(&content)
             ));
         }
@@ -4567,9 +4566,9 @@ fn update_author_confirmation(root: &Path) -> Result<(), ProjectError> {
 
     entries.sort();
     let content = if entries.is_empty() {
-        "# ??????\n\n".to_owned()
+        "# 作者确认链\n\n".to_owned()
     } else {
-        "# ??????\n\n???????????AI ???????\n\n".to_owned()
+        "# 作者确认链\n\n以下章节已保存为作者确认正文，后续 AI 生成必须尊重。\n\n".to_owned()
     };
     let content = format!("{content}{}\n", entries.join("\n"));
     let target = ensure_project_path(root, "facts/author-confirmation.md")?;

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type { WorkspaceProps } from './types'
 
 type ReviewGroup = {
@@ -285,6 +285,44 @@ export function MarkdownDocument(props: {
   actions?: ReactNode
 }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const stats = getMarkdownStats(props.value)
+
+  function updateValue(nextValue: string, selectionStart?: number, selectionEnd?: number) {
+    props.onChange(nextValue)
+    if (selectionStart === undefined || selectionEnd === undefined) return
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(selectionStart, selectionEnd)
+    })
+  }
+
+  function applyAction(action: MarkdownAction) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const next = applyMarkdownAction(props.value, textarea.selectionStart, textarea.selectionEnd, action)
+    updateValue(next.value, next.selectionStart, next.selectionEnd)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const action = markdownActionForKey(event)
+    if (!action) return
+    event.preventDefault()
+    applyAction(action)
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const html = event.clipboardData.getData('text/html')
+    const text = event.clipboardData.getData('text/plain')
+    const cleaned = html ? htmlToMarkdown(html) : cleanPastedText(text)
+    if (!cleaned) return
+    event.preventDefault()
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const next = replaceSelection(props.value, textarea.selectionStart, textarea.selectionEnd, cleaned)
+    updateValue(next.value, next.selectionStart, next.selectionEnd)
+  }
+
   return (
     <section className="editor-card module-document-panel">
       <div className="card-heading">
@@ -297,11 +335,279 @@ export function MarkdownDocument(props: {
           <button className="primary-button" onClick={props.onSave}>保存</button>
         </div>
       </div>
-      {mode === 'edit'
-        ? <textarea className="markdown-preview source" value={props.value} onChange={(event) => props.onChange(event.target.value)} />
-        : <pre className="markdown-rendered local-markdown-rendered">{props.value || '暂无内容。'}</pre>}
+      {mode === 'edit' && (
+        <div className="markdown-editor-shell">
+          <div className="markdown-toolbar" aria-label="Markdown tools">
+            {MARKDOWN_ACTIONS.map((tool) => (
+              <button
+                type="button"
+                key={tool.action}
+                title={tool.title}
+                onClick={() => applyAction(tool.action)}
+              >
+                {tool.label}
+              </button>
+            ))}
+            <span className="shortcut-hint">Ctrl+B / Ctrl+` / Tab</span>
+          </div>
+          <textarea
+            ref={textareaRef}
+            className="markdown-preview source"
+            value={props.value}
+            onChange={(event) => props.onChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+          />
+          <div className="markdown-editor-meta">
+            <span>{stats.lines} 行</span>
+            <span>{stats.paragraphs} 段</span>
+            <span>{stats.units} 字/词</span>
+          </div>
+        </div>
+      )}
+      {mode === 'preview' && (
+        <div className="markdown-rendered local-markdown-rendered">
+          {renderMarkdownPreview(props.value)}
+        </div>
+      )}
     </section>
   )
+}
+
+type MarkdownAction =
+  | 'h1'
+  | 'h2'
+  | 'bold'
+  | 'quote'
+  | 'list'
+  | 'inline-code'
+  | 'code-block'
+  | 'hr'
+  | 'clean'
+
+const MARKDOWN_ACTIONS: Array<{ action: MarkdownAction; label: string; title: string }> = [
+  { action: 'h1', label: 'H1', title: '一级标题' },
+  { action: 'h2', label: 'H2', title: '二级标题' },
+  { action: 'bold', label: 'B', title: '加粗' },
+  { action: 'quote', label: '>', title: '引用' },
+  { action: 'list', label: '- ', title: '列表' },
+  { action: 'inline-code', label: '`', title: '行内代码' },
+  { action: 'code-block', label: '{}', title: '代码块' },
+  { action: 'hr', label: '---', title: '分隔线' },
+  { action: 'clean', label: '清理', title: '清理多余空白' },
+]
+
+function markdownActionForKey(event: KeyboardEvent<HTMLTextAreaElement>): MarkdownAction | null {
+  const command = event.ctrlKey || event.metaKey
+  if (event.key === 'Tab') return 'list'
+  if (!command) return null
+  const key = event.key.toLowerCase()
+  if (key === 'b') return 'bold'
+  if (key === '`') return 'inline-code'
+  if (event.shiftKey && key === 'x') return 'clean'
+  if (event.altKey && key === '1') return 'h1'
+  if (event.altKey && key === '2') return 'h2'
+  if (event.altKey && key === 'q') return 'quote'
+  if (event.shiftKey && key === '7') return 'list'
+  if (key === '-') return 'hr'
+  return null
+}
+
+function applyMarkdownAction(value: string, selectionStart: number, selectionEnd: number, action: MarkdownAction) {
+  if (action === 'clean') {
+    const cleaned = cleanMarkdownWhitespace(value)
+    return { value: cleaned, selectionStart: Math.min(selectionStart, cleaned.length), selectionEnd: Math.min(selectionEnd, cleaned.length) }
+  }
+  if (action === 'bold') return wrapSelection(value, selectionStart, selectionEnd, '**', '**', '加粗文本')
+  if (action === 'inline-code') return wrapSelection(value, selectionStart, selectionEnd, '`', '`', 'code')
+  if (action === 'code-block') return wrapSelection(value, selectionStart, selectionEnd, '```\n', '\n```', '代码')
+  if (action === 'hr') return insertBlock(value, selectionStart, selectionEnd, '\n\n---\n\n')
+  if (action === 'h1') return prefixSelectedLines(value, selectionStart, selectionEnd, '# ')
+  if (action === 'h2') return prefixSelectedLines(value, selectionStart, selectionEnd, '## ')
+  if (action === 'quote') return prefixSelectedLines(value, selectionStart, selectionEnd, '> ')
+  return prefixSelectedLines(value, selectionStart, selectionEnd, '- ')
+}
+
+function replaceSelection(value: string, selectionStart: number, selectionEnd: number, replacement: string) {
+  const nextValue = `${value.slice(0, selectionStart)}${replacement}${value.slice(selectionEnd)}`
+  const cursor = selectionStart + replacement.length
+  return { value: nextValue, selectionStart: cursor, selectionEnd: cursor }
+}
+
+function wrapSelection(value: string, selectionStart: number, selectionEnd: number, before: string, after: string, placeholder: string) {
+  const selected = value.slice(selectionStart, selectionEnd) || placeholder
+  const replacement = `${before}${selected}${after}`
+  const nextValue = `${value.slice(0, selectionStart)}${replacement}${value.slice(selectionEnd)}`
+  return {
+    value: nextValue,
+    selectionStart: selectionStart + before.length,
+    selectionEnd: selectionStart + before.length + selected.length,
+  }
+}
+
+function insertBlock(value: string, selectionStart: number, selectionEnd: number, block: string) {
+  const nextValue = `${value.slice(0, selectionStart)}${block}${value.slice(selectionEnd)}`
+  const cursor = selectionStart + block.length
+  return { value: nextValue, selectionStart: cursor, selectionEnd: cursor }
+}
+
+function prefixSelectedLines(value: string, selectionStart: number, selectionEnd: number, prefix: string) {
+  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+  const lineEndIndex = value.indexOf('\n', selectionEnd)
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex
+  const block = value.slice(lineStart, lineEnd)
+  const nextBlock = block
+    .split('\n')
+    .map((line) => `${prefix}${line.replace(/^(#{1,6}\s+|>\s+|-\s+)/, '')}`)
+    .join('\n')
+  const nextValue = `${value.slice(0, lineStart)}${nextBlock}${value.slice(lineEnd)}`
+  const added = nextBlock.length - block.length
+  return {
+    value: nextValue,
+    selectionStart: selectionStart + prefix.length,
+    selectionEnd: selectionEnd + added,
+  }
+}
+
+function cleanMarkdownWhitespace(value: string) {
+  return value
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .concat('\n')
+}
+
+function cleanPastedText(value: string) {
+  return value.replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').trim()
+}
+
+function htmlToMarkdown(html: string) {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return cleanPastedText(Array.from(doc.body.childNodes).map(nodeToMarkdown).join('\n\n'))
+}
+
+function nodeToMarkdown(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+  if (!(node instanceof HTMLElement)) return ''
+  const content = Array.from(node.childNodes).map(nodeToMarkdown).filter(Boolean).join(' ').trim()
+  const tag = node.tagName.toLowerCase()
+  if (tag === 'h1') return `# ${content}`
+  if (tag === 'h2') return `## ${content}`
+  if (tag === 'h3') return `### ${content}`
+  if (tag === 'blockquote') return content.split('\n').map((line) => `> ${line}`).join('\n')
+  if (tag === 'li') return `- ${content}`
+  if (tag === 'ul' || tag === 'ol') return Array.from(node.children).map(nodeToMarkdown).join('\n')
+  if (tag === 'strong' || tag === 'b') return `**${content}**`
+  if (tag === 'code') return `\`${content}\``
+  if (tag === 'pre') return `\`\`\`\n${node.textContent?.trim() ?? ''}\n\`\`\``
+  if (tag === 'br') return '\n'
+  return content
+}
+
+function renderMarkdownPreview(value: string) {
+  const lines = value.replace(/\r\n?/g, '\n').split('\n')
+  const output: ReactNode[] = []
+  let paragraph: string[] = []
+  let listItems: string[] = []
+  let codeLines: string[] = []
+  let inCode = false
+
+  function flushParagraph() {
+    if (paragraph.length === 0) return
+    output.push(<p key={`p-${output.length}`}>{renderInlineMarkdown(paragraph.join(' '))}</p>)
+    paragraph = []
+  }
+
+  function flushList() {
+    if (listItems.length === 0) return
+    output.push(<ul key={`ul-${output.length}`}>{listItems.map((item, index) => <li key={`${item}-${index}`}>{renderInlineMarkdown(item)}</li>)}</ul>)
+    listItems = []
+  }
+
+  for (const line of lines) {
+    if (line.trim().startsWith('```')) {
+      if (inCode) {
+        output.push(<pre key={`code-${output.length}`}><code>{codeLines.join('\n')}</code></pre>)
+        codeLines = []
+        inCode = false
+      } else {
+        flushParagraph()
+        flushList()
+        inCode = true
+      }
+      continue
+    }
+    if (inCode) {
+      codeLines.push(line)
+      continue
+    }
+    const trimmed = line.trim()
+    if (!trimmed) {
+      flushParagraph()
+      flushList()
+      continue
+    }
+    if (/^---+$/.test(trimmed)) {
+      flushParagraph()
+      flushList()
+      output.push(<hr key={`hr-${output.length}`} />)
+      continue
+    }
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed)
+    if (heading) {
+      flushParagraph()
+      flushList()
+      const level = heading[1].length
+      const text = heading[2]
+      if (level === 1) output.push(<h1 key={`h1-${output.length}`}>{renderInlineMarkdown(text)}</h1>)
+      else if (level === 2) output.push(<h2 key={`h2-${output.length}`}>{renderInlineMarkdown(text)}</h2>)
+      else output.push(<h3 key={`h3-${output.length}`}>{renderInlineMarkdown(text)}</h3>)
+      continue
+    }
+    if (trimmed.startsWith('> ')) {
+      flushParagraph()
+      flushList()
+      output.push(<blockquote key={`quote-${output.length}`}>{renderInlineMarkdown(trimmed.slice(2))}</blockquote>)
+      continue
+    }
+    if (trimmed.startsWith('- ')) {
+      flushParagraph()
+      listItems.push(trimmed.slice(2))
+      continue
+    }
+    paragraph.push(trimmed)
+  }
+
+  flushParagraph()
+  flushList()
+  if (inCode) output.push(<pre key={`code-${output.length}`}><code>{codeLines.join('\n')}</code></pre>)
+  return output.length > 0 ? output : <p>暂无内容。</p>
+}
+
+function renderInlineMarkdown(value: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g
+  let lastIndex = 0
+  for (const match of value.matchAll(pattern)) {
+    if (match.index > lastIndex) nodes.push(value.slice(lastIndex, match.index))
+    const token = match[0]
+    if (token.startsWith('`')) nodes.push(<code key={`${token}-${match.index}`}>{token.slice(1, -1)}</code>)
+    else nodes.push(<strong key={`${token}-${match.index}`}>{token.slice(2, -2)}</strong>)
+    lastIndex = match.index + token.length
+  }
+  if (lastIndex < value.length) nodes.push(value.slice(lastIndex))
+  return nodes
+}
+
+function getMarkdownStats(value: string) {
+  return {
+    lines: value ? value.split(/\r\n?|\n/).length : 0,
+    paragraphs: countParagraphs(value),
+    units: estimateTextUnits(value),
+  }
 }
 
 export function ChapterList(props: WorkspaceProps) {
@@ -323,6 +629,46 @@ export function ChapterList(props: WorkspaceProps) {
 }
 
 export function FocusMode(props: WorkspaceProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const stats = getMarkdownStats(props.manuscript)
+
+  function updateValue(nextValue: string, selectionStart?: number, selectionEnd?: number) {
+    props.onChangeManuscript(nextValue)
+    if (selectionStart === undefined || selectionEnd === undefined) return
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(selectionStart, selectionEnd)
+    })
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const action = markdownActionForKey(event)
+    if (!action) return
+    event.preventDefault()
+    const next = applyMarkdownAction(
+      props.manuscript,
+      event.currentTarget.selectionStart,
+      event.currentTarget.selectionEnd,
+      action,
+    )
+    updateValue(next.value, next.selectionStart, next.selectionEnd)
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const html = event.clipboardData.getData('text/html')
+    const text = event.clipboardData.getData('text/plain')
+    const cleaned = html ? htmlToMarkdown(html) : cleanPastedText(text)
+    if (!cleaned) return
+    event.preventDefault()
+    const next = replaceSelection(
+      props.manuscript,
+      event.currentTarget.selectionStart,
+      event.currentTarget.selectionEnd,
+      cleaned,
+    )
+    updateValue(next.value, next.selectionStart, next.selectionEnd)
+  }
+
   return (
     <section className="focus-mode">
       <div className="focus-topbar">
@@ -330,7 +676,18 @@ export function FocusMode(props: WorkspaceProps) {
         <span>{props.saveState}</span>
         <button onClick={props.onSaveChapter}>保存</button>
       </div>
-      <textarea value={props.manuscript} onChange={(event) => props.onChangeManuscript(event.target.value)} />
+      <textarea
+        ref={textareaRef}
+        value={props.manuscript}
+        onChange={(event) => props.onChangeManuscript(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+      />
+      <div className="focus-meta">
+        <span>{stats.lines} 行</span>
+        <span>{stats.paragraphs} 段</span>
+        <span>{stats.units} 字/词</span>
+      </div>
     </section>
   )
 }

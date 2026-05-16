@@ -3970,11 +3970,13 @@ fn call_openai_compatible_with_system(
     system: &str,
     prompt: &str,
 ) -> Result<String, String> {
-    if provider.api_key.as_deref().unwrap_or("").trim().is_empty() {
+    let kind = provider.kind.as_deref().unwrap_or("OpenAI-compatible");
+    let is_ollama = kind.to_ascii_lowercase().contains("ollama");
+    let api_key = provider.api_key.as_deref().unwrap_or("").trim();
+    if api_key.is_empty() && !is_ollama {
         return Err("provider api key is empty".to_owned());
     }
 
-    let kind = provider.kind.as_deref().unwrap_or("OpenAI-compatible");
     let base_url = provider
         .base_url
         .as_deref()
@@ -3987,11 +3989,79 @@ fn call_openai_compatible_with_system(
         .unwrap_or("unspecified-model");
     let temperature = provider.temperature.unwrap_or(0.7);
 
-    Ok(format!(
-        "Local placeholder response via {kind} {base_url} {model} temp={temperature:.2}; system={}; prompt={}",
-        trim_for_status(system),
-        prompt.trim()
-    ))
+    let mut messages = Vec::new();
+    if !system.trim().is_empty() {
+        messages.push(serde_json::json!({
+            "role": "system",
+            "content": system.trim()
+        }));
+    }
+    messages.push(serde_json::json!({
+        "role": "user",
+        "content": prompt.trim()
+    }));
+
+    let endpoint = chat_completions_endpoint(base_url);
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|error| format!("provider http client init failed: {error}"))?;
+    let mut request = client.post(&endpoint).json(&serde_json::json!({
+        "model": model,
+        "temperature": temperature,
+        "messages": messages
+    }));
+    if !api_key.is_empty() {
+        request = request.bearer_auth(api_key);
+    }
+
+    let response = request
+        .send()
+        .map_err(|error| format!("provider request failed: {error}"))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .map_err(|error| format!("provider response read failed: {error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "provider returned HTTP {status}: {}",
+            trim_for_status(&body)
+        ));
+    }
+    extract_chat_completion_content(&body)
+}
+
+fn chat_completions_endpoint(base_url: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.ends_with("/chat/completions") {
+        trimmed.to_owned()
+    } else {
+        format!("{trimmed}/chat/completions")
+    }
+}
+
+fn extract_chat_completion_content(body: &str) -> Result<String, String> {
+    let parsed: serde_json::Value = serde_json::from_str(body)
+        .map_err(|error| format!("provider returned invalid JSON: {error}"))?;
+    let content = parsed
+        .get("choices")
+        .and_then(|value| value.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| {
+            choice
+                .get("message")
+                .and_then(|message| message.get("content"))
+                .or_else(|| choice.get("text"))
+        })
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    if content.is_empty() {
+        Err("provider response did not contain choices[0].message.content".to_owned())
+    } else {
+        Ok(content)
+    }
 }
 
 fn generate_candidate_content(
@@ -5822,7 +5892,10 @@ fn is_editable_module_markdown(relative_path: &str) -> bool {
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::Read;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
 
     fn create_temp_project(chapter_count: u32) -> (tempfile::TempDir, std::path::PathBuf) {
         let temp = tempfile::tempdir().unwrap();
@@ -5837,6 +5910,60 @@ mod tests {
         })
         .unwrap();
         (temp, root)
+    }
+
+    fn spawn_chat_completion_server(
+        response_body: &'static str,
+    ) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            loop {
+                let read = stream.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+                if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let header_end = buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4)
+                .unwrap_or(buffer.len());
+            let headers = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            while buffer.len().saturating_sub(header_end) < content_length {
+                let read = stream.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+            }
+            let request = String::from_utf8_lossy(&buffer).to_string();
+            sender.send(request).unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.as_bytes().len(),
+                response_body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        (format!("http://{address}/v1"), receiver)
     }
 
     #[test]
@@ -5961,6 +6088,38 @@ mod tests {
     }
 
     #[test]
+    fn openai_compatible_call_posts_chat_completion_request() {
+        let (base_url, receiver) = spawn_chat_completion_server(
+            r#"{"choices":[{"message":{"content":"Provider says ok"}}]}"#,
+        );
+        let provider = AiProviderConfig {
+            id: Some("mock".to_owned()),
+            name: Some("Mock".to_owned()),
+            kind: Some("openai-compatible".to_owned()),
+            enabled: Some(true),
+            base_url: Some(base_url),
+            api_key: Some("sk-test".to_owned()),
+            model: Some("mock-model".to_owned()),
+            temperature: Some(0.3),
+            use_cases: Some(vec!["chapter".to_owned()]),
+        };
+
+        let content =
+            call_openai_compatible_with_system(&provider, "System guard", "User prompt").unwrap();
+
+        assert_eq!(content, "Provider says ok");
+        let request = receiver.recv().unwrap();
+        assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
+        assert!(request.contains("authorization: Bearer sk-test"));
+        assert!(request.contains("\"model\":\"mock-model\""));
+        assert!(request.contains("\"temperature\":0.3"));
+        assert!(request.contains("\"role\":\"system\""));
+        assert!(request.contains("System guard"));
+        assert!(request.contains("\"role\":\"user\""));
+        assert!(request.contains("User prompt"));
+    }
+
+    #[test]
     fn provider_selection_respects_order_and_use_case() {
         let (_temp, root) = create_temp_project(1);
         fs::write(
@@ -6019,27 +6178,31 @@ mod tests {
     fn candidate_generation_uses_chapter_provider_when_available() {
         let (_temp, root) = create_temp_project(1);
         let root_path = root.to_string_lossy().to_string();
+        let (base_url, _receiver) = spawn_chat_completion_server(
+            r##"{"choices":[{"message":{"content":"# Provider Candidate\n\nModel generated chapter."}}]}"##,
+        );
         fs::write(
             root.join(".olienta/ai-providers.json"),
-            r#"[{
+            format!(
+                r#"[{{
   "id": "chapter-provider",
   "name": "Chapter Provider",
   "kind": "openai-compatible",
   "enabled": true,
-  "baseUrl": "https://example.invalid/v1",
+  "baseUrl": "{base_url}",
   "apiKey": "sk-chapter",
   "model": "chapter-model",
   "temperature": 0.2,
   "useCases": ["chapter"]
-}]"#,
+}}]"#
+            ),
         )
         .unwrap();
 
         let draft = generate_candidate_draft(root_path, "001".to_owned()).unwrap();
 
-        assert!(draft.content.contains(
-            "Local placeholder response via openai-compatible https://example.invalid/v1 chapter-model temp=0.20"
-        ));
+        assert!(draft.content.contains("# Provider Candidate"));
+        assert!(draft.content.contains("Model generated chapter."));
         assert!(draft
             .warnings
             .iter()

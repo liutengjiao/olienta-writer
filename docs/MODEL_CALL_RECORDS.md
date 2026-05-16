@@ -19,6 +19,7 @@ logs/model-calls/history.md
 - 输入文件路径，例如章节写作任务书。
 - 输出文件路径，例如候选稿。
 - 调用耗时 `durationMs`。
+- Provider 返回的 token 用量：`promptTokens`、`completionTokens`、`totalTokens`。
 - 结果说明或降级原因。
 
 ## 安全边界
@@ -27,12 +28,12 @@ logs/model-calls/history.md
 - 不记录完整 Prompt。
 - 不记录完整正文。
 - 只记录本地路径和摘要，便于作者追溯生成来源。
+- token 用量来自 Provider 响应的 `usage` 字段；兼容网关不返回时显示为 `-`。
 
 ## 后续
 
 后续可以增加：
 
-- Token 用量。
 - 费用估算。
 - 模型温度和上下文长度。
 - 调用失败重试记录。

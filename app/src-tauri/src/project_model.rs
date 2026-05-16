@@ -207,9 +207,22 @@ struct DraftGenerationResult {
     content: String,
     source: String,
     fallback_reason: Option<String>,
+    usage: Option<ModelTokenUsage>,
 }
 
 type CandidateGenerationResult = DraftGenerationResult;
+
+#[derive(Clone, Copy)]
+struct ModelTokenUsage {
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+    total_tokens: Option<u64>,
+}
+
+struct ProviderCallResult {
+    content: String,
+    usage: Option<ModelTokenUsage>,
+}
 
 struct ModelCallLog<'a> {
     task: &'a str,
@@ -219,6 +232,7 @@ struct ModelCallLog<'a> {
     output_path: Option<&'a str>,
     ok: bool,
     duration_ms: Option<u128>,
+    usage: Option<ModelTokenUsage>,
     message: &'a str,
 }
 
@@ -545,10 +559,11 @@ pub fn generate_blueprint_draft(
                 "你是 Olienta 的章节蓝图 Agent。只输出当前章蓝图 Markdown 草案。不得保存，不得写正文，不得提前释放后续高潮。",
                 &prompt,
             ) {
-                Ok(content) if !content.trim().is_empty() => DraftGenerationResult {
-                    content: content.trim().to_owned(),
+                Ok(result) if !result.content.trim().is_empty() => DraftGenerationResult {
+                    content: result.content.trim().to_owned(),
                     source: label,
                     fallback_reason: None,
+                    usage: result.usage,
                 },
                 Ok(_) => DraftGenerationResult {
                     content: local_blueprint_draft(
@@ -558,6 +573,7 @@ pub fn generate_blueprint_draft(
                     ),
                     source: "local-placeholder".to_owned(),
                     fallback_reason: Some(format!("Provider 返回空内容（{label}）")),
+                    usage: None,
                 },
                 Err(error) => DraftGenerationResult {
                     content: local_blueprint_draft(
@@ -567,6 +583,7 @@ pub fn generate_blueprint_draft(
                     ),
                     source: "local-placeholder".to_owned(),
                     fallback_reason: Some(format!("Provider 调用失败（{label}）：{error}")),
+                    usage: None,
                 },
             }
         }
@@ -578,11 +595,13 @@ pub fn generate_blueprint_draft(
             ),
             source: "local-placeholder".to_owned(),
             fallback_reason: Some("没有可用的 blueprint Provider".to_owned()),
+            usage: None,
         },
         Err(error) => DraftGenerationResult {
             content: local_blueprint_draft(&id, &author_input, Some(error.to_string())),
             source: "local-placeholder".to_owned(),
             fallback_reason: Some(error.to_string()),
+            usage: None,
         },
     };
 
@@ -596,6 +615,7 @@ pub fn generate_blueprint_draft(
             output_path: Some(&relative_path),
             ok: true,
             duration_ms: Some(started_at.elapsed().as_millis()),
+            usage: generation.usage,
             message: generation.fallback_reason.as_deref().unwrap_or(
                 "Blueprint draft generated into editor area; not saved as official blueprint yet.",
             ),
@@ -979,6 +999,7 @@ pub fn generate_candidate_draft(
             output_path: Some(&relative_path),
             ok: true,
             duration_ms: Some(started_at.elapsed().as_millis()),
+            usage: generation.usage,
             message: generation
                 .fallback_reason
                 .as_deref()
@@ -1269,15 +1290,19 @@ pub fn save_ai_providers(
 pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, ProjectError> {
     let root = PathBuf::from(root_path);
     let started_at = Instant::now();
+    let mut usage = None;
     let result: ProviderTestResult = match select_chapter_provider(&root) {
         Ok(Some(provider)) => {
             let label = provider_label(&provider);
             match call_openai_compatible(&provider, "只回复：Olienta connection ok") {
-                Ok(content) => ProviderTestResult {
-                    ok: true,
-                    provider: label,
-                    message: trim_for_status(&content),
-                },
+                Ok(result) => {
+                    usage = result.usage;
+                    ProviderTestResult {
+                        ok: true,
+                        provider: label,
+                        message: trim_for_status(&result.content),
+                    }
+                }
                 Err(error) => ProviderTestResult {
                     ok: false,
                     provider: label,
@@ -1306,6 +1331,7 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
             output_path: Some("logs/model-calls/history.md"),
             ok: result.ok,
             duration_ms: Some(started_at.elapsed().as_millis()),
+            usage,
             message: &result.message,
         },
     )?;
@@ -1411,10 +1437,11 @@ pub fn generate_framework_draft(
                 "你是 Olienta 的框架整理 Agent。只输出可编辑 Markdown 草案。不得声称已经保存，不得覆盖作者意愿。",
                 &prompt,
             ) {
-                Ok(content) if !content.trim().is_empty() => DraftGenerationResult {
-                    content: content.trim().to_owned(),
+                Ok(result) if !result.content.trim().is_empty() => DraftGenerationResult {
+                    content: result.content.trim().to_owned(),
                     source: label,
                     fallback_reason: None,
+                    usage: result.usage,
                 },
                 Ok(_) => DraftGenerationResult {
                     content: local_framework_draft(
@@ -1424,6 +1451,7 @@ pub fn generate_framework_draft(
                     ),
                     source: "local-placeholder".to_owned(),
                     fallback_reason: Some(format!("Provider 返回空内容（{label}）")),
+                    usage: None,
                 },
                 Err(error) => DraftGenerationResult {
                     content: local_framework_draft(
@@ -1433,6 +1461,7 @@ pub fn generate_framework_draft(
                     ),
                     source: "local-placeholder".to_owned(),
                     fallback_reason: Some(format!("Provider 调用失败（{label}）：{error}")),
+                    usage: None,
                 },
             }
         }
@@ -1444,11 +1473,13 @@ pub fn generate_framework_draft(
             ),
             source: "local-placeholder".to_owned(),
             fallback_reason: Some("没有可用的 framework Provider".to_owned()),
+            usage: None,
         },
         Err(error) => DraftGenerationResult {
             content: local_framework_draft(&safe_name, &author_input, Some(error.to_string())),
             source: "local-placeholder".to_owned(),
             fallback_reason: Some(error.to_string()),
+            usage: None,
         },
     };
 
@@ -1462,6 +1493,7 @@ pub fn generate_framework_draft(
             output_path: Some(&relative_path),
             ok: true,
             duration_ms: Some(started_at.elapsed().as_millis()),
+            usage: generation.usage,
             message: generation.fallback_reason.as_deref().unwrap_or(
                 "Framework draft generated into editor area; not saved as official framework file yet.",
             ),
@@ -3817,7 +3849,7 @@ fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), Proje
     let mut content =
         fs::read_to_string(&target).unwrap_or_else(|_| "# Model Call History\n\n".to_owned());
     content.push_str(&format!(
-        "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- durationMs: {}\n- message: {}\n",
+        "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- durationMs: {}\n- promptTokens: {}\n- completionTokens: {}\n- totalTokens: {}\n- message: {}\n",
         log.task,
         if log.ok { "ok" } else { "failed" },
         log.provider,
@@ -3827,10 +3859,19 @@ fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), Proje
         log.duration_ms
             .map(|value| value.to_string())
             .unwrap_or_else(|| "-".to_owned()),
+        format_optional_u64(log.usage.and_then(|usage| usage.prompt_tokens)),
+        format_optional_u64(log.usage.and_then(|usage| usage.completion_tokens)),
+        format_optional_u64(log.usage.and_then(|usage| usage.total_tokens)),
         log.message
     ));
     atomic_write_text(&target, &content)?;
     Ok(())
+}
+
+fn format_optional_u64(value: Option<u64>) -> String {
+    value
+        .map(|item| item.to_string())
+        .unwrap_or_else(|| "-".to_owned())
 }
 
 const PROVIDER_KEY_RELATIVE_PATH: &str = ".olienta/provider-secret.key";
@@ -4049,7 +4090,10 @@ fn provider_label(provider: &AiProviderConfig) -> String {
     }
 }
 
-fn call_openai_compatible(provider: &AiProviderConfig, prompt: &str) -> Result<String, String> {
+fn call_openai_compatible(
+    provider: &AiProviderConfig,
+    prompt: &str,
+) -> Result<ProviderCallResult, String> {
     call_openai_compatible_with_system(provider, "", prompt)
 }
 
@@ -4057,7 +4101,7 @@ fn call_openai_compatible_with_system(
     provider: &AiProviderConfig,
     system: &str,
     prompt: &str,
-) -> Result<String, String> {
+) -> Result<ProviderCallResult, String> {
     let kind = provider.kind.as_deref().unwrap_or("OpenAI-compatible");
     let is_ollama = kind.to_ascii_lowercase().contains("ollama");
     let api_key = provider.api_key.as_deref().unwrap_or("").trim();
@@ -4124,7 +4168,7 @@ fn call_openai_compatible_with_system(
             trim_for_status(&body)
         ));
     }
-    extract_chat_completion_content(&body)
+    extract_chat_completion_result(&body)
 }
 
 fn chat_completions_endpoint(base_url: &str) -> String {
@@ -4136,7 +4180,7 @@ fn chat_completions_endpoint(base_url: &str) -> String {
     }
 }
 
-fn extract_chat_completion_content(body: &str) -> Result<String, String> {
+fn extract_chat_completion_result(body: &str) -> Result<ProviderCallResult, String> {
     let parsed: serde_json::Value = serde_json::from_str(body)
         .map_err(|error| format!("provider returned invalid JSON: {error}"))?;
     let content = parsed
@@ -4156,8 +4200,27 @@ fn extract_chat_completion_content(body: &str) -> Result<String, String> {
     if content.is_empty() {
         Err("provider response did not contain choices[0].message.content".to_owned())
     } else {
-        Ok(content)
+        Ok(ProviderCallResult {
+            content,
+            usage: parse_token_usage(&parsed),
+        })
     }
+}
+
+fn parse_token_usage(parsed: &serde_json::Value) -> Option<ModelTokenUsage> {
+    let usage = parsed.get("usage")?;
+    let prompt_tokens = usage.get("prompt_tokens").and_then(|value| value.as_u64());
+    let completion_tokens = usage
+        .get("completion_tokens")
+        .and_then(|value| value.as_u64());
+    let total_tokens = usage.get("total_tokens").and_then(|value| value.as_u64());
+    (prompt_tokens.is_some() || completion_tokens.is_some() || total_tokens.is_some()).then_some(
+        ModelTokenUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        },
+    )
 }
 
 fn generate_candidate_content(
@@ -4174,11 +4237,12 @@ fn generate_candidate_content(
             brief.content
         );
         match call_openai_compatible_with_system(&provider, system, &prompt) {
-            Ok(content) if !content.trim().is_empty() => {
+            Ok(result) if !result.content.trim().is_empty() => {
                 return CandidateGenerationResult {
-                    content: content.trim().to_owned(),
+                    content: result.content.trim().to_owned(),
                     source: label,
                     fallback_reason: None,
+                    usage: result.usage,
                 };
             }
             Ok(_) => {
@@ -4192,6 +4256,7 @@ fn generate_candidate_content(
                     fallback_reason: Some(format!(
                         "Provider 返回空内容（{label}），已生成本地占位候选稿。"
                     )),
+                    usage: None,
                 };
             }
             Err(error) => {
@@ -4205,6 +4270,7 @@ fn generate_candidate_content(
                     fallback_reason: Some(format!(
                         "Provider 调用失败（{label}）：{error}。已生成本地占位候选稿。"
                     )),
+                    usage: None,
                 };
             }
         }
@@ -4218,6 +4284,7 @@ fn generate_candidate_content(
         ),
         source: "local-placeholder".to_owned(),
         fallback_reason: Some("没有启用的 Provider，已生成本地占位候选稿。".to_owned()),
+        usage: None,
     }
 }
 
@@ -6189,7 +6256,7 @@ mod tests {
     #[test]
     fn openai_compatible_call_posts_chat_completion_request() {
         let (base_url, receiver) = spawn_chat_completion_server(
-            r#"{"choices":[{"message":{"content":"Provider says ok"}}]}"#,
+            r#"{"choices":[{"message":{"content":"Provider says ok"}}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}"#,
         );
         let provider = AiProviderConfig {
             id: Some("mock".to_owned()),
@@ -6206,10 +6273,14 @@ mod tests {
             use_cases: Some(vec!["chapter".to_owned()]),
         };
 
-        let content =
+        let result =
             call_openai_compatible_with_system(&provider, "System guard", "User prompt").unwrap();
 
-        assert_eq!(content, "Provider says ok");
+        assert_eq!(result.content, "Provider says ok");
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, Some(11));
+        assert_eq!(usage.completion_tokens, Some(7));
+        assert_eq!(usage.total_tokens, Some(18));
         let request = receiver.recv().unwrap();
         assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
         assert!(request.contains("authorization: Bearer sk-test"));
@@ -6282,7 +6353,7 @@ mod tests {
         let (_temp, root) = create_temp_project(1);
         let root_path = root.to_string_lossy().to_string();
         let (base_url, _receiver) = spawn_chat_completion_server(
-            r##"{"choices":[{"message":{"content":"# Provider Candidate\n\nModel generated chapter."}}]}"##,
+            r##"{"choices":[{"message":{"content":"# Provider Candidate\n\nModel generated chapter."}}],"usage":{"prompt_tokens":101,"completion_tokens":202,"total_tokens":303}}"##,
         );
         fs::write(
             root.join(".olienta/ai-providers.json"),
@@ -6315,6 +6386,9 @@ mod tests {
         assert!(model_log.contains("Chapter Provider (chapter-model)"));
         assert!(model_log.contains("manuscript/candidates/001.md"));
         assert!(model_log.contains("durationMs:"));
+        assert!(model_log.contains("promptTokens: 101"));
+        assert!(model_log.contains("completionTokens: 202"));
+        assert!(model_log.contains("totalTokens: 303"));
 
         let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
         assert!(task_history.contains("\"provider\":\"Chapter Provider (chapter-model)\""));
@@ -6326,10 +6400,10 @@ mod tests {
         let (_temp, root) = create_temp_project(1);
         let root_path = root.to_string_lossy().to_string();
         let (blueprint_url, _blueprint_receiver) = spawn_chat_completion_server(
-            r##"{"choices":[{"message":{"content":"# Provider Blueprint\n\nModel planned the chapter."}}]}"##,
+            r##"{"choices":[{"message":{"content":"# Provider Blueprint\n\nModel planned the chapter."}}],"usage":{"prompt_tokens":31,"completion_tokens":41,"total_tokens":72}}"##,
         );
         let (framework_url, _framework_receiver) = spawn_chat_completion_server(
-            r##"{"choices":[{"message":{"content":"# Provider Framework\n\nModel shaped the premise."}}]}"##,
+            r##"{"choices":[{"message":{"content":"# Provider Framework\n\nModel shaped the premise."}}],"usage":{"prompt_tokens":51,"completion_tokens":61,"total_tokens":112}}"##,
         );
         fs::write(
             root.join(".olienta/ai-providers.json"),
@@ -6377,6 +6451,8 @@ mod tests {
         assert!(model_log.contains("Blueprint Provider (blueprint-model)"));
         assert!(model_log.contains("Framework Provider (framework-model)"));
         assert!(model_log.contains("durationMs:"));
+        assert!(model_log.contains("promptTokens: 31"));
+        assert!(model_log.contains("totalTokens: 112"));
         assert!(!model_log.contains("blueprint-provider-or-local-placeholder"));
         assert!(!model_log.contains("framework-provider-or-local-placeholder"));
     }

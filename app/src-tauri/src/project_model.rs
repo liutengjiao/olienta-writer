@@ -196,7 +196,10 @@ struct AiProviderConfig {
     base_url: Option<String>,
     api_key: Option<String>,
     model: Option<String>,
+    context_window: Option<u32>,
     temperature: Option<f32>,
+    max_tokens: Option<u32>,
+    timeout_seconds: Option<u64>,
     use_cases: Option<Vec<String>>,
 }
 
@@ -4060,7 +4063,9 @@ fn call_openai_compatible_with_system(
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("unspecified-model");
+    let _context_window = provider.context_window.unwrap_or(0);
     let temperature = provider.temperature.unwrap_or(0.7);
+    let timeout_seconds = provider.timeout_seconds.unwrap_or(90).clamp(5, 300);
 
     let mut messages = Vec::new();
     if !system.trim().is_empty() {
@@ -4076,14 +4081,20 @@ fn call_openai_compatible_with_system(
 
     let endpoint = chat_completions_endpoint(base_url);
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(90))
+        .timeout(Duration::from_secs(timeout_seconds))
         .build()
         .map_err(|error| format!("provider http client init failed: {error}"))?;
-    let mut request = client.post(&endpoint).json(&serde_json::json!({
+    let mut request_body = serde_json::json!({
         "model": model,
         "temperature": temperature,
         "messages": messages
-    }));
+    });
+    if let Some(max_tokens) = provider.max_tokens.filter(|value| *value > 0) {
+        if let Some(object) = request_body.as_object_mut() {
+            object.insert("max_tokens".to_owned(), serde_json::json!(max_tokens));
+        }
+    }
+    let mut request = client.post(&endpoint).json(&request_body);
     if !api_key.is_empty() {
         request = request.bearer_auth(api_key);
     }
@@ -5583,7 +5594,10 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
             "baseUrl": "https://api.openai.com/v1",
             "apiKey": "",
             "model": "gpt-4o-mini",
+            "contextWindow": 128000,
             "temperature": 0.7,
+            "maxTokens": 4096,
+            "timeoutSeconds": 90,
             "useCases": ["chapter", "blueprint", "framework"]
         }]))?,
     )?;
@@ -6173,7 +6187,10 @@ mod tests {
             base_url: Some(base_url),
             api_key: Some("sk-test".to_owned()),
             model: Some("mock-model".to_owned()),
+            context_window: Some(128_000),
             temperature: Some(0.3),
+            max_tokens: Some(777),
+            timeout_seconds: Some(15),
             use_cases: Some(vec!["chapter".to_owned()]),
         };
 
@@ -6186,6 +6203,7 @@ mod tests {
         assert!(request.contains("authorization: Bearer sk-test"));
         assert!(request.contains("\"model\":\"mock-model\""));
         assert!(request.contains("\"temperature\":0.3"));
+        assert!(request.contains("\"max_tokens\":777"));
         assert!(request.contains("\"role\":\"system\""));
         assert!(request.contains("System guard"));
         assert!(request.contains("\"role\":\"user\""));

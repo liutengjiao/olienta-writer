@@ -63,11 +63,15 @@ const exported = buildProviderExportJson(JSON.stringify([
     apiKey: 'sk-secret',
     apiKeyEncrypted: 'olienta:v1:abc',
     model: 'm',
+    contextWindow: 128000,
+    maxTokens: 4096,
+    timeoutSeconds: 45,
   },
 ]))
 expect('provider export strips plaintext key', !exported.includes('sk-secret'), exported)
 expect('provider export strips encrypted key', !exported.includes('apiKeyEncrypted'), exported)
 expect('provider export leaves empty key placeholder', exported.includes('"apiKey": ""'), exported)
+expect('provider export keeps runtime controls', exported.includes('"maxTokens": 4096') && exported.includes('"timeoutSeconds": 45'), exported)
 
 for (const check of checks) {
   const prefix = check.ok ? 'PASS' : 'FAIL'

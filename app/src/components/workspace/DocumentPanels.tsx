@@ -389,7 +389,10 @@ function ProviderPanel(props: WorkspaceProps) {
         baseUrl: 'https://api.openai.com/v1',
         apiKey: '',
         model: '',
+        contextWindow: 128000,
         temperature: 0.7,
+        maxTokens: 4096,
+        timeoutSeconds: 90,
         useCases: ['chapter'],
       },
     ])
@@ -510,6 +513,16 @@ function ProviderPanel(props: WorkspaceProps) {
                       <input value={provider.model} onChange={(event) => updateProvider(index, { model: event.target.value })} />
                     </label>
                     <label>
+                      <span>上下文窗口</span>
+                      <input
+                        type="number"
+                        step="1000"
+                        min="0"
+                        value={provider.contextWindow ?? 0}
+                        onChange={(event) => updateProvider(index, { contextWindow: numberOrUndefined(event.target.value) })}
+                      />
+                    </label>
+                    <label>
                       <span>温度</span>
                       <input
                         type="number"
@@ -518,6 +531,27 @@ function ProviderPanel(props: WorkspaceProps) {
                         max="2"
                         value={provider.temperature ?? 0.7}
                         onChange={(event) => updateProvider(index, { temperature: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      <span>最大输出</span>
+                      <input
+                        type="number"
+                        step="256"
+                        min="0"
+                        value={provider.maxTokens ?? 0}
+                        onChange={(event) => updateProvider(index, { maxTokens: numberOrUndefined(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      <span>超时秒数</span>
+                      <input
+                        type="number"
+                        step="5"
+                        min="5"
+                        max="300"
+                        value={provider.timeoutSeconds ?? 90}
+                        onChange={(event) => updateProvider(index, { timeoutSeconds: numberOrUndefined(event.target.value) })}
                       />
                     </label>
                   </div>
@@ -637,7 +671,10 @@ type AiProviderDraft = {
   baseUrl: string
   apiKey?: string
   model: string
+  contextWindow?: number
   temperature?: number
+  maxTokens?: number
+  timeoutSeconds?: number
   useCases: string[]
   [key: string]: unknown
 }
@@ -679,10 +716,19 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
     baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
     model: typeof value.model === 'string' ? value.model : '',
+    contextWindow: typeof value.contextWindow === 'number' ? value.contextWindow : 0,
     temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
+    maxTokens: typeof value.maxTokens === 'number' ? value.maxTokens : 0,
+    timeoutSeconds: typeof value.timeoutSeconds === 'number' ? value.timeoutSeconds : 90,
     useCases,
   }
 }
+
+function numberOrUndefined(value: string) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

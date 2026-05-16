@@ -8,7 +8,7 @@ import {
   markdownActionForKey,
   replaceSelection,
 } from '../src/lib/editorLogic.ts'
-import { summarizeModelCallHistory } from '../src/lib/modelCallLogic.ts'
+import { filterModelCallEntries, parseModelCallHistory, summarizeModelCallHistory } from '../src/lib/modelCallLogic.ts'
 import { buildProviderExportJson } from '../src/lib/providerLogic.ts'
 
 const checks = []
@@ -74,7 +74,7 @@ expect('provider export strips encrypted key', !exported.includes('apiKeyEncrypt
 expect('provider export leaves empty key placeholder', exported.includes('"apiKey": ""'), exported)
 expect('provider export keeps runtime controls', exported.includes('"maxTokens": 4096') && exported.includes('"timeoutSeconds": 45'), exported)
 
-const modelCallSummary = summarizeModelCallHistory(`# 模型调用记录
+const modelCallHistory = `# 模型调用记录
 
 ## candidate-draft
 
@@ -96,11 +96,16 @@ const modelCallSummary = summarizeModelCallHistory(`# 模型调用记录
 - provider: Framework Provider
 - durationMs: 800
 - totalTokens: 100
-`)
+`
+const modelCallSummary = summarizeModelCallHistory(modelCallHistory)
+const modelCallEntries = parseModelCallHistory(modelCallHistory)
+const failedProviderCalls = filterModelCallEntries(modelCallEntries, { status: 'failed', query: 'broken' })
 expect('model call summary counts calls', modelCallSummary.callCount === 3, JSON.stringify(modelCallSummary))
 expect('model call summary counts failures', modelCallSummary.failedCount === 1, JSON.stringify(modelCallSummary))
 expect('model call summary averages duration', modelCallSummary.averageDurationMs === 1000, JSON.stringify(modelCallSummary))
 expect('model call summary totals tokens', modelCallSummary.totalTokens === 400, JSON.stringify(modelCallSummary))
+expect('model call parser keeps entry fields', modelCallEntries[0]?.provider === 'Chapter Provider' && modelCallEntries[0]?.durationMs === 1200, JSON.stringify(modelCallEntries[0]))
+expect('model call filter matches status and query', failedProviderCalls.length === 1 && failedProviderCalls[0].task === 'provider-test', JSON.stringify(failedProviderCalls))
 
 for (const check of checks) {
   const prefix = check.ok ? 'PASS' : 'FAIL'

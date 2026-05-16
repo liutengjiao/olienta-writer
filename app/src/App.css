@@ -1256,6 +1256,126 @@ button:disabled {
   background: var(--panel-2);
 }
 
+.model-call-browser {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.model-call-filters {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.18fr) minmax(160px, 0.28fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.model-call-filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-call-filters span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-call-filters strong {
+  min-height: 38px;
+  padding: 9px 12px;
+  color: var(--text-strong);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.model-call-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.model-call-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.model-call-row.failed {
+  border-color: rgba(241, 118, 130, 0.42);
+}
+
+.model-call-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.model-call-row-head div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-call-row-head strong,
+.model-call-row-head span,
+.model-call-row dd,
+.model-call-row p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-call-row-head strong {
+  color: var(--text-strong);
+}
+
+.model-call-row-head div span,
+.model-call-row dt,
+.model-call-row p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-call-row dl {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.2fr) minmax(90px, 0.2fr) minmax(90px, 0.2fr) minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+
+.model-call-row dl div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+
+.model-call-row dt {
+  margin-bottom: 4px;
+}
+
+.model-call-row dd,
+.model-call-row p {
+  margin: 0;
+}
+
+.model-call-row dd {
+  color: var(--text);
+  font-size: 13px;
+}
+
 .character-workspace {
   display: grid;
   gap: 18px;
@@ -2792,6 +2912,11 @@ button:disabled {
 
 @media (max-width: 980px) {
   .timeline-file-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .model-call-filters,
+  .model-call-row dl {
     grid-template-columns: 1fr;
   }
 }

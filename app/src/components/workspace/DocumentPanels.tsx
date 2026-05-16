@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
-import { summarizeModelCallHistory } from '../../lib/modelCallLogic'
+import { filterModelCallEntries, parseModelCallHistory, summarizeModelCallHistory } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -250,12 +250,21 @@ export function LogsPanel(props: WorkspaceProps) {
 }
 
 export function ModelCallsPanel(props: WorkspaceProps) {
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [taskFilter, setTaskFilter] = useState('all')
+  const [query, setQuery] = useState('')
+  const defaultPath = 'logs/model-calls/history.md'
+  const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
+  const summary = useMemo(() => summarizeModelCallHistory(props.markdownPreview), [props.markdownPreview])
+  const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
+  const filteredEntries = useMemo(
+    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, query }).slice().reverse(),
+    [entries, query, statusFilter, taskFilter],
+  )
+
   if (props.activeModuleView === 'model-providers' || props.activeView === 'ai-providers') {
     return <ProviderPanel {...props} />
   }
-
-  const defaultPath = 'logs/model-calls/history.md'
-  const summary = summarizeModelCallHistory(props.markdownPreview)
 
   return (
     <section className="system-events-panel">
@@ -274,6 +283,61 @@ export function ModelCallsPanel(props: WorkspaceProps) {
         <article><span>平均耗时</span><strong>{summary.averageDurationMs} ms</strong></article>
         <article><span>Token 总量</span><strong>{summary.totalTokens}</strong></article>
       </div>
+      <section className="model-call-browser">
+        <div className="model-call-filters">
+          <label>
+            <span>状态</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">全部</option>
+              <option value="ok">成功</option>
+              <option value="failed">失败</option>
+              <option value="unknown">未知</option>
+            </select>
+          </label>
+          <label>
+            <span>类型</span>
+            <select value={taskFilter} onChange={(event) => setTaskFilter(event.target.value)}>
+              <option value="all">全部</option>
+              {taskOptions.map((task) => <option value={task} key={task}>{task}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>搜索</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Provider、章节、路径或结果"
+            />
+          </label>
+          <strong>{filteredEntries.length} 条</strong>
+        </div>
+        <div className="model-call-list">
+          {filteredEntries.length === 0 ? (
+            <p className="empty-note">没有匹配的模型调用记录。</p>
+          ) : (
+            filteredEntries.slice(0, 12).map((entry) => (
+              <article className={`model-call-row ${entry.status}`} key={entry.id}>
+                <div className="model-call-row-head">
+                  <div>
+                    <strong>{entry.task}</strong>
+                    <span>{entry.provider}</span>
+                  </div>
+                  <span className={`status-pill ${entry.status === 'ok' ? 'unlocked' : entry.status === 'failed' ? 'locked' : ''}`}>
+                    {formatModelCallStatus(entry.status)}
+                  </span>
+                </div>
+                <dl>
+                  <div><dt>章节</dt><dd>{entry.chapter}</dd></div>
+                  <div><dt>耗时</dt><dd>{entry.durationMs === null ? '-' : `${entry.durationMs} ms`}</dd></div>
+                  <div><dt>Token</dt><dd>{entry.totalTokens ?? '-'}</dd></div>
+                  <div><dt>输出</dt><dd>{entry.output}</dd></div>
+                </dl>
+                <p>{entry.message}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
       <MarkdownDocument
         title={props.activeModuleView === 'model-tests' ? '连接测试记录' : '模型调用记录'}
         path={props.selectedMarkdownPath || defaultPath}
@@ -283,6 +347,15 @@ export function ModelCallsPanel(props: WorkspaceProps) {
       />
     </section>
   )
+}
+
+function formatModelCallStatus(status: string) {
+  const labels: Record<string, string> = {
+    ok: '成功',
+    failed: '失败',
+    unknown: '未知',
+  }
+  return labels[status] || status
 }
 
 export function ExportPanel(props: WorkspaceProps) {

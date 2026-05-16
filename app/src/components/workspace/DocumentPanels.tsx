@@ -3,7 +3,7 @@ import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../typ
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
-import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../../lib/modelCallLogic'
+import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -253,6 +253,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [taskFilter, setTaskFilter] = useState('all')
   const [providerFilter, setProviderFilter] = useState('all')
+  const [failureKindFilter, setFailureKindFilter] = useState('all')
   const [query, setQuery] = useState('')
   const defaultPath = 'logs/model-calls/history.md'
   const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
@@ -264,15 +265,17 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const providerSummaries = useMemo(() => summarizeModelCallProviders(entries, pricingProviders), [entries, pricingProviders])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
   const providerOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.provider))).sort(), [entries])
+  const failureKindOptions = useMemo(() => failureSummary.reasonGroups.map((group) => group.kind), [failureSummary])
   const filteredEntries = useMemo(
-    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, provider: providerFilter, query }).slice().reverse(),
-    [entries, providerFilter, query, statusFilter, taskFilter],
+    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, provider: providerFilter, failureKind: failureKindFilter, query }).slice().reverse(),
+    [entries, failureKindFilter, providerFilter, query, statusFilter, taskFilter],
   )
 
   function clearModelCallFilters() {
     setStatusFilter('all')
     setTaskFilter('all')
     setProviderFilter('all')
+    setFailureKindFilter('all')
     setQuery('')
   }
 
@@ -280,6 +283,15 @@ export function ModelCallsPanel(props: WorkspaceProps) {
     setProviderFilter(provider)
     setStatusFilter(status)
     setTaskFilter('all')
+    setFailureKindFilter('all')
+    setQuery('')
+  }
+
+  function drillIntoFailureKind(kind: string) {
+    setFailureKindFilter(kind)
+    setStatusFilter('failed')
+    setTaskFilter('all')
+    setProviderFilter('all')
     setQuery('')
   }
 
@@ -324,6 +336,19 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   </div>
                   <b>{group.count}</b>
                   <p>{group.latestTask}：{group.latestMessage}</p>
+                </button>
+              ))}
+            </div>
+            <div className="model-call-failure-column">
+              <h3>错误归因</h3>
+              {failureSummary.reasonGroups.map((group) => (
+                <button type="button" className="model-call-failure-card" key={group.kind} onClick={() => drillIntoFailureKind(group.kind)}>
+                  <div>
+                    <strong>{group.label}</strong>
+                    <span>{group.latestProvider}</span>
+                  </div>
+                  <b>{group.count}</b>
+                  <p>{group.latestMessage}</p>
                 </button>
               ))}
             </div>
@@ -403,6 +428,13 @@ export function ModelCallsPanel(props: WorkspaceProps) {
             </select>
           </label>
           <label>
+            <span>错误类型</span>
+            <select value={failureKindFilter} onChange={(event) => setFailureKindFilter(event.target.value)}>
+              <option value="all">全部</option>
+              {failureKindOptions.map((kind) => <option value={kind} key={kind}>{formatFailureKind(kind)}</option>)}
+            </select>
+          </label>
+          <label>
             <span>搜索</span>
             <input
               value={query}
@@ -438,6 +470,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   <div><dt>耗时</dt><dd>{entry.durationMs === null ? '-' : `${entry.durationMs} ms`}</dd></div>
                   <div><dt>Token</dt><dd>{entry.totalTokens ?? '-'}</dd></div>
                   <div><dt>费用</dt><dd>{estimatedCost === null ? '-' : formatUsd(estimatedCost)}</dd></div>
+                  <div><dt>错误</dt><dd>{entry.status === 'failed' ? classifyModelCallFailure(entry).label : '-'}</dd></div>
                   <div><dt>输出</dt><dd>{entry.output}</dd></div>
                 </dl>
                 <p>{entry.message}</p>
@@ -465,6 +498,20 @@ function formatModelCallStatus(status: string) {
     unknown: '未知',
   }
   return labels[status] || status
+}
+
+function formatFailureKind(kind: string) {
+  const labels: Record<string, string> = {
+    auth: '鉴权',
+    quota: '配额',
+    'rate-limit': '限流',
+    timeout: '超时',
+    network: '网络',
+    'response-format': '返回格式',
+    provider: 'Provider',
+    unknown: '未知',
+  }
+  return labels[kind] || kind
 }
 
 function formatUsd(value: number) {

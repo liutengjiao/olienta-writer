@@ -8,7 +8,7 @@ import {
   markdownActionForKey,
   replaceSelection,
 } from '../src/lib/editorLogic.ts'
-import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../src/lib/modelCallLogic.ts'
+import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../src/lib/modelCallLogic.ts'
 import { buildProviderExportJson } from '../src/lib/providerLogic.ts'
 
 const checks = []
@@ -117,6 +117,7 @@ const modelCallSummary = summarizeModelCallHistory(modelCallHistory)
 const modelCallEntries = parseModelCallHistory(modelCallHistory)
 const failedProviderCalls = filterModelCallEntries(modelCallEntries, { status: 'failed', query: 'broken' })
 const chapterProviderCalls = filterModelCallEntries(modelCallEntries, { provider: 'Chapter Provider' })
+const timeoutCalls = filterModelCallEntries(modelCallEntries, { failureKind: 'timeout' })
 const candidateCost = estimateModelCallCost(modelCallEntries[0], [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
 const costSummary = summarizeModelCallCosts(modelCallEntries, [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
 const failureSummary = summarizeModelCallFailures(modelCallEntries)
@@ -128,10 +129,13 @@ expect('model call summary totals tokens', modelCallSummary.totalTokens === 400,
 expect('model call parser keeps entry fields', modelCallEntries[0]?.provider === 'Chapter Provider' && modelCallEntries[0]?.durationMs === 1200, JSON.stringify(modelCallEntries[0]))
 expect('model call filter matches status and query', failedProviderCalls.length === 2 && failedProviderCalls[0].task === 'provider-test', JSON.stringify(failedProviderCalls))
 expect('model call filter matches provider exactly', chapterProviderCalls.length === 1 && chapterProviderCalls[0].task === 'candidate-draft', JSON.stringify(chapterProviderCalls))
+expect('model call filter matches failure kind', timeoutCalls.length === 1 && timeoutCalls[0].message === 'timeout', JSON.stringify(timeoutCalls))
 expect('model call cost estimates prompt and completion tokens', Math.abs((candidateCost ?? 0) - 0.0005) < 0.000001, String(candidateCost))
 expect('model call cost summary counts priced and unpriced calls', costSummary.pricedCallCount === 1 && costSummary.unpricedCallCount === 3 && Math.abs(costSummary.estimatedCostUsd - 0.0005) < 0.000001, JSON.stringify(costSummary))
 expect('model call failure summary groups providers', failureSummary.providerGroups[0]?.provider === 'Broken Provider' && failureSummary.providerGroups[0]?.count === 2, JSON.stringify(failureSummary))
 expect('model call failure summary keeps recent reason', failureSummary.recentFailures[0]?.message === 'timeout', JSON.stringify(failureSummary.recentFailures))
+expect('model call failure summary groups reasons', failureSummary.reasonGroups.some((group) => group.kind === 'auth' && group.count === 1) && failureSummary.reasonGroups.some((group) => group.kind === 'timeout' && group.count === 1), JSON.stringify(failureSummary.reasonGroups))
+expect('model call failure classifier detects auth', classifyModelCallFailure(modelCallEntries[1]).kind === 'auth', JSON.stringify(modelCallEntries[1]))
 expect('model call provider summary orders by call count', providerSummary[0]?.provider === 'Broken Provider' && providerSummary[0]?.failureRate === 100, JSON.stringify(providerSummary))
 expect('model call provider summary keeps cost and duration', providerSummary[1]?.provider === 'Chapter Provider' && providerSummary[1]?.averageDurationMs === 1200 && Math.abs(providerSummary[1]?.estimatedCostUsd - 0.0005) < 0.000001, JSON.stringify(providerSummary))
 

@@ -47,7 +47,26 @@ export type ModelCallFailureGroup = {
 export type ModelCallFailureSummary = {
   totalFailed: number
   providerGroups: ModelCallFailureGroup[]
+  reasonGroups: ModelCallFailureReasonGroup[]
   recentFailures: ModelCallEntry[]
+}
+
+export type ModelCallFailureKind =
+  | 'auth'
+  | 'quota'
+  | 'rate-limit'
+  | 'timeout'
+  | 'network'
+  | 'response-format'
+  | 'provider'
+  | 'unknown'
+
+export type ModelCallFailureReasonGroup = {
+  kind: ModelCallFailureKind
+  label: string
+  count: number
+  latestProvider: string
+  latestMessage: string
 }
 
 export type ModelCallProviderSummary = {
@@ -101,7 +120,7 @@ export function parseModelCallHistory(content: string): ModelCallEntry[] {
 
 export function filterModelCallEntries(
   entries: ModelCallEntry[],
-  filters: { status?: string; task?: string; provider?: string; query?: string },
+  filters: { status?: string; task?: string; provider?: string; failureKind?: string; query?: string },
 ) {
   const query = filters.query?.trim().toLowerCase() ?? ''
   return entries.filter((entry) => {
@@ -112,6 +131,13 @@ export function filterModelCallEntries(
       return false
     }
     if (filters.provider && filters.provider !== 'all' && entry.provider !== filters.provider) {
+      return false
+    }
+    if (
+      filters.failureKind &&
+      filters.failureKind !== 'all' &&
+      classifyModelCallFailure(entry).kind !== filters.failureKind
+    ) {
       return false
     }
     if (query.length > 0) {
@@ -167,6 +193,7 @@ export function summarizeModelCallCosts(entries: ModelCallEntry[], providers: Mo
 export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimit = 5): ModelCallFailureSummary {
   const failedEntries = entries.filter((entry) => entry.status === 'failed')
   const groups = new Map<string, ModelCallFailureGroup>()
+  const reasonGroups = new Map<ModelCallFailureKind, ModelCallFailureReasonGroup>()
 
   for (const entry of failedEntries) {
     const provider = entry.provider || '-'
@@ -184,6 +211,19 @@ export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimi
     group.latestTask = entry.task
     group.latestMessage = entry.message
     groups.set(provider, group)
+
+    const reason = classifyModelCallFailure(entry)
+    const reasonGroup = reasonGroups.get(reason.kind) ?? {
+      kind: reason.kind,
+      label: reason.label,
+      count: 0,
+      latestProvider: entry.provider,
+      latestMessage: entry.message,
+    }
+    reasonGroup.count += 1
+    reasonGroup.latestProvider = entry.provider
+    reasonGroup.latestMessage = entry.message
+    reasonGroups.set(reason.kind, reasonGroup)
   }
 
   return {
@@ -191,8 +231,43 @@ export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimi
     providerGroups: Array.from(groups.values()).sort((left, right) =>
       right.count - left.count || left.provider.localeCompare(right.provider),
     ),
+    reasonGroups: Array.from(reasonGroups.values()).sort((left, right) =>
+      right.count - left.count || left.label.localeCompare(right.label),
+    ),
     recentFailures: failedEntries.slice(-recentLimit).reverse(),
   }
+}
+
+export function classifyModelCallFailure(entry: ModelCallEntry): { kind: ModelCallFailureKind; label: string } {
+  if (entry.status !== 'failed') return { kind: 'unknown', label: '未知' }
+
+  const text = [
+    entry.message,
+    entry.raw,
+  ].join('\n').toLowerCase()
+
+  if (matchesAny(text, ['unauthorized', 'forbidden', '401', '403', 'api key', 'apikey', 'invalid key', 'authentication', 'auth'])) {
+    return { kind: 'auth', label: '鉴权' }
+  }
+  if (matchesAny(text, ['quota', 'insufficient_quota', 'billing', '余额', '额度'])) {
+    return { kind: 'quota', label: '配额' }
+  }
+  if (matchesAny(text, ['rate limit', 'rate_limit', '429', 'too many requests'])) {
+    return { kind: 'rate-limit', label: '限流' }
+  }
+  if (matchesAny(text, ['timeout', 'timed out', 'deadline', '超时'])) {
+    return { kind: 'timeout', label: '超时' }
+  }
+  if (matchesAny(text, ['network', 'dns', 'connection', 'connect', 'socket', 'tls', 'certificate', 'proxy'])) {
+    return { kind: 'network', label: '网络' }
+  }
+  if (matchesAny(text, ['json', 'parse', 'deserialize', 'invalid response', 'missing choices', 'format'])) {
+    return { kind: 'response-format', label: '返回格式' }
+  }
+  if (matchesAny(text, ['provider', 'model', 'base url', 'endpoint', '404', 'not found', 'unsupported'])) {
+    return { kind: 'provider', label: 'Provider' }
+  }
+  return { kind: 'unknown', label: '未知' }
 }
 
 export function summarizeModelCallProviders(
@@ -305,6 +380,10 @@ function optionalNumericField(entry: string, field: string) {
 
 function positiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function matchesAny(value: string, patterns: string[]) {
+  return patterns.some((pattern) => value.includes(pattern))
 }
 
 function normalizeProviderLabel(value: unknown) {

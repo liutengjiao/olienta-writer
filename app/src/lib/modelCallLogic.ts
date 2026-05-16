@@ -101,7 +101,7 @@ export function parseModelCallHistory(content: string): ModelCallEntry[] {
 
 export function filterModelCallEntries(
   entries: ModelCallEntry[],
-  filters: { status?: string; task?: string; query?: string },
+  filters: { status?: string; task?: string; provider?: string; query?: string },
 ) {
   const query = filters.query?.trim().toLowerCase() ?? ''
   return entries.filter((entry) => {
@@ -109,6 +109,9 @@ export function filterModelCallEntries(
       return false
     }
     if (filters.task && filters.task !== 'all' && entry.task !== filters.task) {
+      return false
+    }
+    if (filters.provider && filters.provider !== 'all' && entry.provider !== filters.provider) {
       return false
     }
     if (query.length > 0) {

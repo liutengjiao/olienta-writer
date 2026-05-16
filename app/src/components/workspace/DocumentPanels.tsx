@@ -252,6 +252,7 @@ export function LogsPanel(props: WorkspaceProps) {
 export function ModelCallsPanel(props: WorkspaceProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [taskFilter, setTaskFilter] = useState('all')
+  const [providerFilter, setProviderFilter] = useState('all')
   const [query, setQuery] = useState('')
   const defaultPath = 'logs/model-calls/history.md'
   const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
@@ -262,10 +263,25 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const failureSummary = useMemo(() => summarizeModelCallFailures(entries), [entries])
   const providerSummaries = useMemo(() => summarizeModelCallProviders(entries, pricingProviders), [entries, pricingProviders])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
+  const providerOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.provider))).sort(), [entries])
   const filteredEntries = useMemo(
-    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, query }).slice().reverse(),
-    [entries, query, statusFilter, taskFilter],
+    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, provider: providerFilter, query }).slice().reverse(),
+    [entries, providerFilter, query, statusFilter, taskFilter],
   )
+
+  function clearModelCallFilters() {
+    setStatusFilter('all')
+    setTaskFilter('all')
+    setProviderFilter('all')
+    setQuery('')
+  }
+
+  function drillIntoProvider(provider: string, status = 'all') {
+    setProviderFilter(provider)
+    setStatusFilter(status)
+    setTaskFilter('all')
+    setQuery('')
+  }
 
   if (props.activeModuleView === 'model-providers' || props.activeView === 'ai-providers') {
     return <ProviderPanel {...props} />
@@ -301,14 +317,14 @@ export function ModelCallsPanel(props: WorkspaceProps) {
             <div className="model-call-failure-column">
               <h3>失败 Provider</h3>
               {failureSummary.providerGroups.slice(0, 5).map((group) => (
-                <article className="model-call-failure-card" key={group.provider}>
+                <button type="button" className="model-call-failure-card" key={group.provider} onClick={() => drillIntoProvider(group.provider, 'failed')}>
                   <div>
                     <strong>{group.provider}</strong>
                     <span>{group.tasks.join(' / ')}</span>
                   </div>
                   <b>{group.count}</b>
                   <p>{group.latestTask}：{group.latestMessage}</p>
-                </article>
+                </button>
               ))}
             </div>
             <div className="model-call-failure-column">
@@ -345,7 +361,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
               <span>最近结果</span>
             </div>
             {providerSummaries.map((provider) => (
-              <article className="model-provider-row" key={provider.provider}>
+              <button type="button" className={`model-provider-row ${providerFilter === provider.provider ? 'active' : ''}`} key={provider.provider} onClick={() => drillIntoProvider(provider.provider)}>
                 <div>
                   <strong>{provider.provider}</strong>
                   <span>{provider.tasks.join(' / ')}</span>
@@ -356,7 +372,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                 <span>{provider.totalTokens}</span>
                 <span>{formatUsd(provider.estimatedCostUsd)}</span>
                 <p>{formatModelCallStatus(provider.latestStatus)}：{provider.latestMessage}</p>
-              </article>
+              </button>
             ))}
           </div>
         )}
@@ -380,6 +396,13 @@ export function ModelCallsPanel(props: WorkspaceProps) {
             </select>
           </label>
           <label>
+            <span>Provider</span>
+            <select value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}>
+              <option value="all">全部</option>
+              {providerOptions.map((provider) => <option value={provider} key={provider}>{provider}</option>)}
+            </select>
+          </label>
+          <label>
             <span>搜索</span>
             <input
               value={query}
@@ -387,7 +410,11 @@ export function ModelCallsPanel(props: WorkspaceProps) {
               placeholder="Provider、章节、路径或结果"
             />
           </label>
-          <strong>{filteredEntries.length} 条</strong>
+          <div className="model-call-filter-actions">
+            <strong>{filteredEntries.length} 条</strong>
+            <button type="button" className="ghost-button" onClick={() => setStatusFilter('failed')}>只看失败</button>
+            <button type="button" className="ghost-button" onClick={clearModelCallFilters}>清除筛选</button>
+          </div>
         </div>
         <div className="model-call-list">
           {filteredEntries.length === 0 ? (

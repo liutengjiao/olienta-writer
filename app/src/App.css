@@ -1264,7 +1264,7 @@ button:disabled {
 
 .model-call-filters {
   display: grid;
-  grid-template-columns: minmax(120px, 0.18fr) minmax(160px, 0.28fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(110px, 0.16fr) minmax(150px, 0.24fr) minmax(170px, 0.3fr) minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
   min-width: 0;
@@ -1285,7 +1285,16 @@ button:disabled {
   font-size: 12px;
 }
 
-.model-call-filters strong {
+.model-call-filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.model-call-filter-actions strong {
   min-height: 38px;
   padding: 9px 12px;
   color: var(--text-strong);
@@ -1362,6 +1371,14 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card);
+  color: inherit;
+  text-align: left;
+}
+
+.model-provider-row:hover,
+.model-provider-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .model-provider-row div {
@@ -1427,6 +1444,13 @@ button:disabled {
   border: 1px solid rgba(241, 118, 130, 0.28);
   border-radius: 8px;
   background: var(--card);
+  color: inherit;
+  text-align: left;
+}
+
+button.model-call-failure-card:hover {
+  border-color: rgba(241, 118, 130, 0.55);
+  background: rgba(241, 118, 130, 0.08);
 }
 
 .model-call-failure-card.compact {

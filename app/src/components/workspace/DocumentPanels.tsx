@@ -3,6 +3,7 @@ import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../typ
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
+import { summarizeModelCallHistory } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -254,6 +255,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   }
 
   const defaultPath = 'logs/model-calls/history.md'
+  const summary = summarizeModelCallHistory(props.markdownPreview)
 
   return (
     <section className="system-events-panel">
@@ -265,6 +267,12 @@ export function ModelCallsPanel(props: WorkspaceProps) {
           <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
           <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(defaultPath)}>打开历史</button>
         </div>
+      </div>
+      <div className="health-strip">
+        <article><span>调用次数</span><strong>{summary.callCount}</strong></article>
+        <article><span>失败次数</span><strong>{summary.failedCount}</strong></article>
+        <article><span>平均耗时</span><strong>{summary.averageDurationMs} ms</strong></article>
+        <article><span>Token 总量</span><strong>{summary.totalTokens}</strong></article>
       </div>
       <MarkdownDocument
         title={props.activeModuleView === 'model-tests' ? '连接测试记录' : '模型调用记录'}

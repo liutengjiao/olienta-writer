@@ -8,6 +8,7 @@ import {
   markdownActionForKey,
   replaceSelection,
 } from '../src/lib/editorLogic.ts'
+import { summarizeModelCallHistory } from '../src/lib/modelCallLogic.ts'
 import { buildProviderExportJson } from '../src/lib/providerLogic.ts'
 
 const checks = []
@@ -72,6 +73,34 @@ expect('provider export strips plaintext key', !exported.includes('sk-secret'), 
 expect('provider export strips encrypted key', !exported.includes('apiKeyEncrypted'), exported)
 expect('provider export leaves empty key placeholder', exported.includes('"apiKey": ""'), exported)
 expect('provider export keeps runtime controls', exported.includes('"maxTokens": 4096') && exported.includes('"timeoutSeconds": 45'), exported)
+
+const modelCallSummary = summarizeModelCallHistory(`# 模型调用记录
+
+## candidate-draft
+
+- status: ok
+- provider: Chapter Provider
+- durationMs: 1200
+- totalTokens: 300
+
+## provider-test
+
+- status: failed
+- provider: Broken Provider
+- durationMs: -
+- totalTokens: -
+
+## framework-draft
+
+- status: ok
+- provider: Framework Provider
+- durationMs: 800
+- totalTokens: 100
+`)
+expect('model call summary counts calls', modelCallSummary.callCount === 3, JSON.stringify(modelCallSummary))
+expect('model call summary counts failures', modelCallSummary.failedCount === 1, JSON.stringify(modelCallSummary))
+expect('model call summary averages duration', modelCallSummary.averageDurationMs === 1000, JSON.stringify(modelCallSummary))
+expect('model call summary totals tokens', modelCallSummary.totalTokens === 400, JSON.stringify(modelCallSummary))
 
 for (const check of checks) {
   const prefix = check.ok ? 'PASS' : 'FAIL'

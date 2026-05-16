@@ -50,6 +50,20 @@ export type ModelCallFailureSummary = {
   recentFailures: ModelCallEntry[]
 }
 
+export type ModelCallProviderSummary = {
+  provider: string
+  callCount: number
+  failedCount: number
+  failureRate: number
+  averageDurationMs: number
+  totalTokens: number
+  estimatedCostUsd: number
+  pricedCallCount: number
+  tasks: string[]
+  latestStatus: string
+  latestMessage: string
+}
+
 export function summarizeModelCallHistory(content: string): ModelCallSummary {
   const entries = parseModelCallHistory(content)
 
@@ -176,6 +190,70 @@ export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimi
     ),
     recentFailures: failedEntries.slice(-recentLimit).reverse(),
   }
+}
+
+export function summarizeModelCallProviders(
+  entries: ModelCallEntry[],
+  providers: ModelCallPricing[],
+): ModelCallProviderSummary[] {
+  const groups = new Map<string, {
+    entries: ModelCallEntry[]
+    durationTotal: number
+    durationCount: number
+    estimatedCostUsd: number
+    pricedCallCount: number
+    tasks: string[]
+  }>()
+
+  for (const entry of entries) {
+    const provider = entry.provider || '-'
+    const group = groups.get(provider) ?? {
+      entries: [],
+      durationTotal: 0,
+      durationCount: 0,
+      estimatedCostUsd: 0,
+      pricedCallCount: 0,
+      tasks: [],
+    }
+    group.entries.push(entry)
+    if (entry.durationMs !== null && entry.durationMs > 0) {
+      group.durationTotal += entry.durationMs
+      group.durationCount += 1
+    }
+    const cost = estimateModelCallCost(entry, providers)
+    if (cost !== null) {
+      group.estimatedCostUsd += cost
+      group.pricedCallCount += 1
+    }
+    if (!group.tasks.includes(entry.task)) {
+      group.tasks.push(entry.task)
+    }
+    groups.set(provider, group)
+  }
+
+  return Array.from(groups.entries())
+    .map(([provider, group]) => {
+      const latest = group.entries[group.entries.length - 1]
+      const failedCount = group.entries.filter((entry) => entry.status === 'failed').length
+      return {
+        provider,
+        callCount: group.entries.length,
+        failedCount,
+        failureRate: group.entries.length === 0 ? 0 : Math.round((failedCount / group.entries.length) * 100),
+        averageDurationMs: group.durationCount === 0 ? 0 : Math.round(group.durationTotal / group.durationCount),
+        totalTokens: group.entries.reduce((total, entry) => total + (entry.totalTokens ?? 0), 0),
+        estimatedCostUsd: group.estimatedCostUsd,
+        pricedCallCount: group.pricedCallCount,
+        tasks: group.tasks,
+        latestStatus: latest?.status ?? 'unknown',
+        latestMessage: latest?.message ?? '-',
+      }
+    })
+    .sort((left, right) =>
+      right.callCount - left.callCount ||
+      right.failedCount - left.failedCount ||
+      left.provider.localeCompare(right.provider),
+    )
 }
 
 function parseModelCallEntry(entry: string, index: number): ModelCallEntry {

@@ -1310,6 +1310,17 @@ button:disabled {
   background: var(--panel-2);
 }
 
+.model-provider-diagnostics {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.model-provider-diagnostics .panel-heading,
 .model-call-failure-panel .panel-heading {
   display: flex;
   align-items: center;
@@ -1317,11 +1328,74 @@ button:disabled {
   gap: 12px;
 }
 
+.model-provider-diagnostics .panel-heading span,
 .model-call-failure-panel .panel-heading span,
 .model-call-failure-card span,
 .model-call-failure-card p {
   color: var(--muted);
   font-size: 12px;
+}
+
+.model-provider-table {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.model-provider-table-head,
+.model-provider-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.15fr) minmax(54px, 0.24fr) minmax(68px, 0.28fr) minmax(88px, 0.34fr) minmax(86px, 0.34fr) minmax(82px, 0.3fr) minmax(160px, 0.9fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.model-provider-table-head {
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-provider-row {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.model-provider-row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-provider-row strong,
+.model-provider-row span,
+.model-provider-row p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-provider-row strong,
+.model-provider-row b {
+  color: var(--text-strong);
+}
+
+.model-provider-row div span,
+.model-provider-row > span,
+.model-provider-row p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-provider-row p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.danger-text {
+  color: var(--danger) !important;
 }
 
 .model-call-failure-grid {
@@ -3004,8 +3078,14 @@ button:disabled {
 
   .model-call-filters,
   .model-call-row dl,
-  .model-call-failure-grid {
+  .model-call-failure-grid,
+  .model-provider-table-head,
+  .model-provider-row {
     grid-template-columns: 1fr;
+  }
+
+  .model-provider-table-head {
+    display: none;
   }
 }
 

@@ -3,7 +3,7 @@ import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../typ
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
-import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory } from '../../lib/modelCallLogic'
+import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -260,6 +260,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const pricingProviders = useMemo(() => parsedProviders.ok ? parsedProviders.providers : [], [parsedProviders])
   const costSummary = useMemo(() => summarizeModelCallCosts(entries, pricingProviders), [entries, pricingProviders])
   const failureSummary = useMemo(() => summarizeModelCallFailures(entries), [entries])
+  const providerSummaries = useMemo(() => summarizeModelCallProviders(entries, pricingProviders), [entries, pricingProviders])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
   const filteredEntries = useMemo(
     () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, query }).slice().reverse(),
@@ -322,6 +323,41 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                 </article>
               ))}
             </div>
+          </div>
+        )}
+      </section>
+      <section className="model-provider-diagnostics">
+        <div className="panel-heading">
+          <h2>Provider 诊断</h2>
+          <span>{providerSummaries.length} 个 Provider</span>
+        </div>
+        {providerSummaries.length === 0 ? (
+          <p className="empty-note">还没有可汇总的模型调用记录。</p>
+        ) : (
+          <div className="model-provider-table">
+            <div className="model-provider-table-head">
+              <span>Provider</span>
+              <span>调用</span>
+              <span>失败率</span>
+              <span>平均耗时</span>
+              <span>Token</span>
+              <span>费用</span>
+              <span>最近结果</span>
+            </div>
+            {providerSummaries.map((provider) => (
+              <article className="model-provider-row" key={provider.provider}>
+                <div>
+                  <strong>{provider.provider}</strong>
+                  <span>{provider.tasks.join(' / ')}</span>
+                </div>
+                <b>{provider.callCount}</b>
+                <b className={provider.failedCount > 0 ? 'danger-text' : ''}>{provider.failureRate}%</b>
+                <span>{provider.averageDurationMs} ms</span>
+                <span>{provider.totalTokens}</span>
+                <span>{formatUsd(provider.estimatedCostUsd)}</span>
+                <p>{formatModelCallStatus(provider.latestStatus)}：{provider.latestMessage}</p>
+              </article>
+            ))}
           </div>
         )}
       </section>

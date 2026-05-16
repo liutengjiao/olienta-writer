@@ -3,7 +3,7 @@ import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../typ
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
-import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallHistory } from '../../lib/modelCallLogic'
+import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -259,6 +259,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const parsedProviders = useMemo(() => parseProviders(props.aiProvidersJson), [props.aiProvidersJson])
   const pricingProviders = useMemo(() => parsedProviders.ok ? parsedProviders.providers : [], [parsedProviders])
   const costSummary = useMemo(() => summarizeModelCallCosts(entries, pricingProviders), [entries, pricingProviders])
+  const failureSummary = useMemo(() => summarizeModelCallFailures(entries), [entries])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
   const filteredEntries = useMemo(
     () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, query }).slice().reverse(),
@@ -287,6 +288,43 @@ export function ModelCallsPanel(props: WorkspaceProps) {
         <article><span>Token 总量</span><strong>{summary.totalTokens}</strong></article>
         <article><span>预估费用</span><strong>{formatUsd(costSummary.estimatedCostUsd)}</strong></article>
       </div>
+      <section className="model-call-failure-panel">
+        <div className="panel-heading">
+          <h2>失败诊断</h2>
+          <span>{failureSummary.totalFailed} 条失败调用</span>
+        </div>
+        {failureSummary.totalFailed === 0 ? (
+          <p className="empty-note">当前模型调用日志里没有失败记录。</p>
+        ) : (
+          <div className="model-call-failure-grid">
+            <div className="model-call-failure-column">
+              <h3>失败 Provider</h3>
+              {failureSummary.providerGroups.slice(0, 5).map((group) => (
+                <article className="model-call-failure-card" key={group.provider}>
+                  <div>
+                    <strong>{group.provider}</strong>
+                    <span>{group.tasks.join(' / ')}</span>
+                  </div>
+                  <b>{group.count}</b>
+                  <p>{group.latestTask}：{group.latestMessage}</p>
+                </article>
+              ))}
+            </div>
+            <div className="model-call-failure-column">
+              <h3>最近失败</h3>
+              {failureSummary.recentFailures.map((entry) => (
+                <article className="model-call-failure-card compact" key={entry.id}>
+                  <div>
+                    <strong>{entry.task}</strong>
+                    <span>{entry.provider}</span>
+                  </div>
+                  <p>{entry.message}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
       <section className="model-call-browser">
         <div className="model-call-filters">
           <label>

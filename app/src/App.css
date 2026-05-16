@@ -1300,6 +1300,93 @@ button:disabled {
   overflow: auto;
 }
 
+.model-call-failure-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.model-call-failure-panel .panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-call-failure-panel .panel-heading span,
+.model-call-failure-card span,
+.model-call-failure-card p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-call-failure-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.model-call-failure-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.model-call-failure-column h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.model-call-failure-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(241, 118, 130, 0.28);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.model-call-failure-card.compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.model-call-failure-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-call-failure-card strong,
+.model-call-failure-card span,
+.model-call-failure-card p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-call-failure-card strong,
+.model-call-failure-card b {
+  color: var(--text-strong);
+}
+
+.model-call-failure-card b {
+  font-size: 20px;
+}
+
+.model-call-failure-card p {
+  grid-column: 1 / -1;
+  margin: 0;
+  line-height: 1.55;
+}
+
 .model-call-row {
   display: grid;
   gap: 10px;
@@ -2916,7 +3003,8 @@ button:disabled {
   }
 
   .model-call-filters,
-  .model-call-row dl {
+  .model-call-row dl,
+  .model-call-failure-grid {
     grid-template-columns: 1fr;
   }
 }

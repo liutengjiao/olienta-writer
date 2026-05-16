@@ -36,6 +36,20 @@ export type ModelCallCostSummary = {
   unpricedCallCount: number
 }
 
+export type ModelCallFailureGroup = {
+  provider: string
+  count: number
+  tasks: string[]
+  latestTask: string
+  latestMessage: string
+}
+
+export type ModelCallFailureSummary = {
+  totalFailed: number
+  providerGroups: ModelCallFailureGroup[]
+  recentFailures: ModelCallEntry[]
+}
+
 export function summarizeModelCallHistory(content: string): ModelCallSummary {
   const entries = parseModelCallHistory(content)
 
@@ -130,6 +144,37 @@ export function summarizeModelCallCosts(entries: ModelCallEntry[], providers: Mo
     estimatedCostUsd,
     pricedCallCount,
     unpricedCallCount,
+  }
+}
+
+export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimit = 5): ModelCallFailureSummary {
+  const failedEntries = entries.filter((entry) => entry.status === 'failed')
+  const groups = new Map<string, ModelCallFailureGroup>()
+
+  for (const entry of failedEntries) {
+    const provider = entry.provider || '-'
+    const group = groups.get(provider) ?? {
+      provider,
+      count: 0,
+      tasks: [],
+      latestTask: entry.task,
+      latestMessage: entry.message,
+    }
+    group.count += 1
+    if (!group.tasks.includes(entry.task)) {
+      group.tasks.push(entry.task)
+    }
+    group.latestTask = entry.task
+    group.latestMessage = entry.message
+    groups.set(provider, group)
+  }
+
+  return {
+    totalFailed: failedEntries.length,
+    providerGroups: Array.from(groups.values()).sort((left, right) =>
+      right.count - left.count || left.provider.localeCompare(right.provider),
+    ),
+    recentFailures: failedEntries.slice(-recentLimit).reverse(),
   }
 }
 

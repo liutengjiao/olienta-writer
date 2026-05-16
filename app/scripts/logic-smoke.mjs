@@ -8,7 +8,7 @@ import {
   markdownActionForKey,
   replaceSelection,
 } from '../src/lib/editorLogic.ts'
-import { filterModelCallEntries, parseModelCallHistory, summarizeModelCallHistory } from '../src/lib/modelCallLogic.ts'
+import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallHistory } from '../src/lib/modelCallLogic.ts'
 import { buildProviderExportJson } from '../src/lib/providerLogic.ts'
 
 const checks = []
@@ -67,12 +67,15 @@ const exported = buildProviderExportJson(JSON.stringify([
     contextWindow: 128000,
     maxTokens: 4096,
     timeoutSeconds: 45,
+    inputPricePerMillionTokens: 0.15,
+    outputPricePerMillionTokens: 0.6,
   },
 ]))
 expect('provider export strips plaintext key', !exported.includes('sk-secret'), exported)
 expect('provider export strips encrypted key', !exported.includes('apiKeyEncrypted'), exported)
 expect('provider export leaves empty key placeholder', exported.includes('"apiKey": ""'), exported)
 expect('provider export keeps runtime controls', exported.includes('"maxTokens": 4096') && exported.includes('"timeoutSeconds": 45'), exported)
+expect('provider export keeps pricing controls', exported.includes('"inputPricePerMillionTokens": 0.15') && exported.includes('"outputPricePerMillionTokens": 0.6'), exported)
 
 const modelCallHistory = `# 模型调用记录
 
@@ -81,6 +84,8 @@ const modelCallHistory = `# 模型调用记录
 - status: ok
 - provider: Chapter Provider
 - durationMs: 1200
+- promptTokens: 100
+- completionTokens: 200
 - totalTokens: 300
 
 ## provider-test
@@ -95,17 +100,23 @@ const modelCallHistory = `# 模型调用记录
 - status: ok
 - provider: Framework Provider
 - durationMs: 800
+- promptTokens: 40
+- completionTokens: 60
 - totalTokens: 100
 `
 const modelCallSummary = summarizeModelCallHistory(modelCallHistory)
 const modelCallEntries = parseModelCallHistory(modelCallHistory)
 const failedProviderCalls = filterModelCallEntries(modelCallEntries, { status: 'failed', query: 'broken' })
+const candidateCost = estimateModelCallCost(modelCallEntries[0], [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
+const costSummary = summarizeModelCallCosts(modelCallEntries, [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
 expect('model call summary counts calls', modelCallSummary.callCount === 3, JSON.stringify(modelCallSummary))
 expect('model call summary counts failures', modelCallSummary.failedCount === 1, JSON.stringify(modelCallSummary))
 expect('model call summary averages duration', modelCallSummary.averageDurationMs === 1000, JSON.stringify(modelCallSummary))
 expect('model call summary totals tokens', modelCallSummary.totalTokens === 400, JSON.stringify(modelCallSummary))
 expect('model call parser keeps entry fields', modelCallEntries[0]?.provider === 'Chapter Provider' && modelCallEntries[0]?.durationMs === 1200, JSON.stringify(modelCallEntries[0]))
 expect('model call filter matches status and query', failedProviderCalls.length === 1 && failedProviderCalls[0].task === 'provider-test', JSON.stringify(failedProviderCalls))
+expect('model call cost estimates prompt and completion tokens', Math.abs((candidateCost ?? 0) - 0.0005) < 0.000001, String(candidateCost))
+expect('model call cost summary counts priced and unpriced calls', costSummary.pricedCallCount === 1 && costSummary.unpricedCallCount === 2 && Math.abs(costSummary.estimatedCostUsd - 0.0005) < 0.000001, JSON.stringify(costSummary))
 
 for (const check of checks) {
   const prefix = check.ok ? 'PASS' : 'FAIL'

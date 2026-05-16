@@ -5677,6 +5677,8 @@ fn scaffold_project(root: &Path, project: &ProjectYaml) -> Result<(), ProjectErr
             "temperature": 0.7,
             "maxTokens": 4096,
             "timeoutSeconds": 90,
+            "inputPricePerMillionTokens": 0,
+            "outputPricePerMillionTokens": 0,
             "useCases": ["chapter", "blueprint", "framework"]
         }]))?,
     )?;

@@ -3,7 +3,7 @@ import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../typ
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
 import { buildProviderExportJson } from '../../lib/providerLogic'
-import { filterModelCallEntries, parseModelCallHistory, summarizeModelCallHistory } from '../../lib/modelCallLogic'
+import { estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallHistory } from '../../lib/modelCallLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -256,6 +256,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const defaultPath = 'logs/model-calls/history.md'
   const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
   const summary = useMemo(() => summarizeModelCallHistory(props.markdownPreview), [props.markdownPreview])
+  const parsedProviders = useMemo(() => parseProviders(props.aiProvidersJson), [props.aiProvidersJson])
+  const pricingProviders = useMemo(() => parsedProviders.ok ? parsedProviders.providers : [], [parsedProviders])
+  const costSummary = useMemo(() => summarizeModelCallCosts(entries, pricingProviders), [entries, pricingProviders])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
   const filteredEntries = useMemo(
     () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, query }).slice().reverse(),
@@ -282,6 +285,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
         <article><span>失败次数</span><strong>{summary.failedCount}</strong></article>
         <article><span>平均耗时</span><strong>{summary.averageDurationMs} ms</strong></article>
         <article><span>Token 总量</span><strong>{summary.totalTokens}</strong></article>
+        <article><span>预估费用</span><strong>{formatUsd(costSummary.estimatedCostUsd)}</strong></article>
       </div>
       <section className="model-call-browser">
         <div className="model-call-filters">
@@ -315,7 +319,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
           {filteredEntries.length === 0 ? (
             <p className="empty-note">没有匹配的模型调用记录。</p>
           ) : (
-            filteredEntries.slice(0, 12).map((entry) => (
+            filteredEntries.slice(0, 12).map((entry) => {
+              const estimatedCost = estimateModelCallCost(entry, pricingProviders)
+              return (
               <article className={`model-call-row ${entry.status}`} key={entry.id}>
                 <div className="model-call-row-head">
                   <div>
@@ -330,11 +336,13 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   <div><dt>章节</dt><dd>{entry.chapter}</dd></div>
                   <div><dt>耗时</dt><dd>{entry.durationMs === null ? '-' : `${entry.durationMs} ms`}</dd></div>
                   <div><dt>Token</dt><dd>{entry.totalTokens ?? '-'}</dd></div>
+                  <div><dt>费用</dt><dd>{estimatedCost === null ? '-' : formatUsd(estimatedCost)}</dd></div>
                   <div><dt>输出</dt><dd>{entry.output}</dd></div>
                 </dl>
                 <p>{entry.message}</p>
               </article>
-            ))
+              )
+            })
           )}
         </div>
       </section>
@@ -356,6 +364,12 @@ function formatModelCallStatus(status: string) {
     unknown: '未知',
   }
   return labels[status] || status
+}
+
+function formatUsd(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '$0.0000'
+  if (value < 0.0001) return '<$0.0001'
+  return `$${value.toFixed(4)}`
 }
 
 export function ExportPanel(props: WorkspaceProps) {
@@ -474,6 +488,8 @@ function ProviderPanel(props: WorkspaceProps) {
         temperature: 0.7,
         maxTokens: 4096,
         timeoutSeconds: 90,
+        inputPricePerMillionTokens: 0,
+        outputPricePerMillionTokens: 0,
         useCases: ['chapter'],
       },
     ])
@@ -635,6 +651,26 @@ function ProviderPanel(props: WorkspaceProps) {
                         onChange={(event) => updateProvider(index, { timeoutSeconds: numberOrUndefined(event.target.value) })}
                       />
                     </label>
+                    <label>
+                      <span>输入百万 Token 美元</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={provider.inputPricePerMillionTokens ?? 0}
+                        onChange={(event) => updateProvider(index, { inputPricePerMillionTokens: numberOrUndefined(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      <span>输出百万 Token 美元</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={provider.outputPricePerMillionTokens ?? 0}
+                        onChange={(event) => updateProvider(index, { outputPricePerMillionTokens: numberOrUndefined(event.target.value) })}
+                      />
+                    </label>
                   </div>
                   <div className="use-case-row">
                     {PROVIDER_USE_CASES.map((useCase) => (
@@ -756,6 +792,8 @@ type AiProviderDraft = {
   temperature?: number
   maxTokens?: number
   timeoutSeconds?: number
+  inputPricePerMillionTokens?: number
+  outputPricePerMillionTokens?: number
   useCases: string[]
   [key: string]: unknown
 }
@@ -801,6 +839,8 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
     temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
     maxTokens: typeof value.maxTokens === 'number' ? value.maxTokens : 0,
     timeoutSeconds: typeof value.timeoutSeconds === 'number' ? value.timeoutSeconds : 90,
+    inputPricePerMillionTokens: typeof value.inputPricePerMillionTokens === 'number' ? value.inputPricePerMillionTokens : 0,
+    outputPricePerMillionTokens: typeof value.outputPricePerMillionTokens === 'number' ? value.outputPricePerMillionTokens : 0,
     useCases,
   }
 }

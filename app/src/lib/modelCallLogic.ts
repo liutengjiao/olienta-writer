@@ -22,6 +22,20 @@ export type ModelCallEntry = {
   raw: string
 }
 
+export type ModelCallPricing = {
+  id?: string
+  name?: string
+  model?: string
+  inputPricePerMillionTokens?: number
+  outputPricePerMillionTokens?: number
+}
+
+export type ModelCallCostSummary = {
+  estimatedCostUsd: number
+  pricedCallCount: number
+  unpricedCallCount: number
+}
+
 export function summarizeModelCallHistory(content: string): ModelCallSummary {
   const entries = parseModelCallHistory(content)
 
@@ -85,6 +99,40 @@ export function filterModelCallEntries(
   })
 }
 
+export function estimateModelCallCost(entry: ModelCallEntry, providers: ModelCallPricing[]) {
+  const pricing = findModelCallPricing(entry, providers)
+  if (!pricing) return null
+  const inputPrice = positiveNumber(pricing.inputPricePerMillionTokens)
+  const outputPrice = positiveNumber(pricing.outputPricePerMillionTokens)
+  if (inputPrice === null && outputPrice === null) return null
+
+  const promptCost = ((entry.promptTokens ?? 0) / 1_000_000) * (inputPrice ?? 0)
+  const completionCost = ((entry.completionTokens ?? 0) / 1_000_000) * (outputPrice ?? 0)
+  return promptCost + completionCost
+}
+
+export function summarizeModelCallCosts(entries: ModelCallEntry[], providers: ModelCallPricing[]): ModelCallCostSummary {
+  let estimatedCostUsd = 0
+  let pricedCallCount = 0
+  let unpricedCallCount = 0
+
+  for (const entry of entries) {
+    const cost = estimateModelCallCost(entry, providers)
+    if (cost === null) {
+      unpricedCallCount += 1
+    } else {
+      estimatedCostUsd += cost
+      pricedCallCount += 1
+    }
+  }
+
+  return {
+    estimatedCostUsd,
+    pricedCallCount,
+    unpricedCallCount,
+  }
+}
+
 function parseModelCallEntry(entry: string, index: number): ModelCallEntry {
   const task = entry.match(/^##\s+(.+)$/m)?.[1]?.trim() ?? `call-${index + 1}`
   return {
@@ -104,6 +152,20 @@ function parseModelCallEntry(entry: string, index: number): ModelCallEntry {
   }
 }
 
+function findModelCallPricing(entry: ModelCallEntry, providers: ModelCallPricing[]) {
+  const providerLabel = normalizeProviderLabel(entry.provider)
+  return providers.find((provider) => {
+    const labels = [
+      provider.name,
+      provider.id,
+      provider.model,
+      provider.name && provider.model ? `${provider.name} (${provider.model})` : '',
+      provider.id && provider.model ? `${provider.id} (${provider.model})` : '',
+    ].map(normalizeProviderLabel)
+    return labels.includes(providerLabel)
+  })
+}
+
 function fieldValue(entry: string, field: string) {
   const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = entry.match(new RegExp(`^- ${escaped}:\\s*(.*)$`, 'm'))
@@ -113,4 +175,12 @@ function fieldValue(entry: string, field: string) {
 function optionalNumericField(entry: string, field: string) {
   const value = Number(fieldValue(entry, field))
   return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function positiveNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function normalizeProviderLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }

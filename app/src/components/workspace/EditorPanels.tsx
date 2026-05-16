@@ -77,7 +77,12 @@ export function DraftPanel(props: WorkspaceProps) {
           actions={
             <>
               <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
-              <button className="ghost-button" onClick={props.onGenerateCandidate}>生成</button>
+              <button className="ghost-button" onClick={props.onGenerateCandidate} disabled={props.candidateGenerationRunning}>
+                {props.candidateGenerationRunning ? '生成中' : '生成'}
+              </button>
+              {props.candidateGenerationRunning && (
+                <button className="ghost-button danger" onClick={props.onCancelCandidateGeneration}>取消生成</button>
+              )}
               <button className="ghost-button" onClick={props.onClearCandidate}>清空</button>
               <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')}>追加</button>
               <button className="ghost-button" onClick={() => props.onAdoptCandidate('insert')}>插入光标</button>
@@ -85,6 +90,7 @@ export function DraftPanel(props: WorkspaceProps) {
             </>
           }
         />
+        <p className="empty-note">{props.candidateGenerationStatus}</p>
 
         <section className="draft-diff-card">
           <div className="card-heading">

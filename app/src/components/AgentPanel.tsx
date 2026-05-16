@@ -28,6 +28,8 @@ type Props = {
   candidatePath: string
   candidateReviewPath: string
   candidate: string
+  candidateGenerationRunning: boolean
+  candidateGenerationStatus: string
   skillFiles: SkillFileSummary[]
   onClose: () => void
   onComposeBrief: () => void
@@ -51,6 +53,7 @@ type Props = {
   onChangeWritingBrief: (content: string) => void
   onChangeCandidate: (content: string) => void
   onGenerateCandidate: () => void
+  onCancelCandidateGeneration: () => void
   onSaveCandidate: () => void
   onClearCandidate: () => void
   onAdoptCandidate: () => void
@@ -158,7 +161,12 @@ export function AgentPanel(props: Props) {
           <>
             <button type="button" onClick={props.onComposeBrief}>装配任务书</button>
             <button type="button" onClick={props.onClearCandidate}>清空候选稿</button>
-            <button type="button" className="primary" onClick={props.onGenerateCandidate}>生成候选稿</button>
+            <button type="button" className="primary" onClick={props.onGenerateCandidate} disabled={props.candidateGenerationRunning}>
+              {props.candidateGenerationRunning ? '生成中' : '生成候选稿'}
+            </button>
+            {props.candidateGenerationRunning && (
+              <button type="button" onClick={props.onCancelCandidateGeneration}>取消生成</button>
+            )}
           </>
         )}
         {knowledgeFocused && (
@@ -181,6 +189,7 @@ export function AgentPanel(props: Props) {
       {chapterFocused && (
         <section className="agent-block candidate-block">
           <BlockHeader title="候选稿" path={props.candidatePath} />
+          <p className="empty-note">{props.candidateGenerationStatus}</p>
           <textarea
             className="agent-candidate"
             value={props.candidate}

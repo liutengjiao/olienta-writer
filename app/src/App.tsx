@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as tauriApi from './api/tauriApi'
 import { AgentPanel } from './components/AgentPanel'
 import { ModuleRail, ProjectPanel } from './components/ProjectPanel'
@@ -84,6 +84,9 @@ function App() {
   const [candidateHistory, setCandidateHistory] = useState<BlueprintHistorySummary[]>([])
   const [selectedCandidateHistoryPath, setSelectedCandidateHistoryPath] = useState('')
   const [candidateHistoryPreview, setCandidateHistoryPreview] = useState('')
+  const [candidateGenerationRunning, setCandidateGenerationRunning] = useState(false)
+  const [candidateGenerationStatus, setCandidateGenerationStatus] = useState('未开始')
+  const candidateGenerationRunRef = useRef(0)
   const { tasks, setTaskStatus } = useTaskStatus()
   const {
     confirmedFacts,
@@ -345,12 +348,30 @@ function App() {
   }
 
   async function selectChapterAndRefresh(chapterId: string) {
+    if (candidateGenerationRunning) {
+      candidateGenerationRunRef.current += 1
+      setCandidateGenerationRunning(false)
+      setCandidateGenerationStatus('已取消上一章生成')
+    }
     await selectChapter(chapterId)
     setCandidateReviewPath(`manuscript/candidates/reviews/${chapterId}.md`)
     if (project) {
       await refreshBlueprintHistory(project.root_path, chapterId)
       await refreshCandidateHistory(project.root_path, chapterId)
     }
+  }
+
+  function cancelCandidateGeneration() {
+    if (!candidateGenerationRunning) {
+      setCandidateGenerationStatus('当前没有正在生成的候选稿')
+      return
+    }
+    candidateGenerationRunRef.current += 1
+    setCandidateGenerationRunning(false)
+    setTaskStatus('ai', 'ready')
+    setAssistantState('候选稿生成已取消')
+    setCandidateGenerationStatus('已取消，本次返回结果会被忽略')
+    setMessage('已取消本次候选稿生成。底层 Provider 请求如果已经发出，返回后不会覆盖当前候选稿。')
   }
 
   function selectView(view: ViewKey) {
@@ -676,20 +697,31 @@ function App() {
       return
     }
 
+    const runId = candidateGenerationRunRef.current + 1
+    candidateGenerationRunRef.current = runId
+    const chapterId = selectedChapterId
+    setCandidateGenerationRunning(true)
+    setCandidateGenerationStatus(`正在请求第 ${chapterId} 章 Provider`)
+    setTaskStatus('ai', 'working')
     setAssistantState('正在生成候选稿')
     try {
       if (!isTauriRuntime) {
-        const preview = `# 第${Number(selectedChapterId)}章 候选稿\n\n这是浏览器预览模式下的候选稿。它不会写入正文，只有点击“采用为正文”才会进入编辑器。`
-        setWritingBriefPath(`tasks/writing-briefs/${selectedChapterId}.md`)
+        const preview = `# 第${Number(chapterId)}章 候选稿\n\n这是浏览器预览模式下的候选稿。它不会写入正文，只有点击“采用为正文”才会进入编辑器。`
+        if (candidateGenerationRunRef.current !== runId) return
+        setWritingBriefPath(`tasks/writing-briefs/${chapterId}.md`)
         setCandidate(preview)
-      setCandidatePath(`manuscript/candidates/${selectedChapterId}.md`)
-      setCandidateReviewPath(`manuscript/candidates/reviews/${selectedChapterId}.md`)
+        setCandidatePath(`manuscript/candidates/${chapterId}.md`)
+        setCandidateReviewPath(`manuscript/candidates/reviews/${chapterId}.md`)
         setCandidateWarnings(['完整性提醒：候选稿明显偏短，可能不是完整章节。'])
+        setCandidateGenerationRunning(false)
+        setCandidateGenerationStatus('预览候选稿已生成')
+        setTaskStatus('ai', 'done')
         setAssistantState('预览候选稿已生成')
         return
       }
 
-      const draft = await tauriApi.generateCandidateDraft(project.root_path, selectedChapterId)
+      const draft = await tauriApi.generateCandidateDraft(project.root_path, chapterId)
+      if (candidateGenerationRunRef.current !== runId) return
       setCandidate(draft.content)
       setCandidatePath(draft.relative_path)
       setCandidateReviewPath(draft.review_path)
@@ -697,11 +729,18 @@ function App() {
       setCandidateWarnings(draft.warnings)
       await loadMarkdownFiles(project.root_path)
       await loadMarkdownFile(project.root_path, 'tasks/history.jsonl')
-      await refreshCandidateHistory(project.root_path, selectedChapterId)
+      await refreshCandidateHistory(project.root_path, chapterId)
+      if (candidateGenerationRunRef.current !== runId) return
       setTaskStatus('ai', 'done')
+      setCandidateGenerationRunning(false)
+      setCandidateGenerationStatus(`第 ${chapterId} 章候选稿已生成`)
       setAssistantState('候选稿已生成')
       setMessage(`候选稿已生成并保存到 ${draft.relative_path}，审查报告 ${draft.review_path}。尚未进入正文。`)
     } catch (error) {
+      if (candidateGenerationRunRef.current !== runId) return
+      setCandidateGenerationRunning(false)
+      setCandidateGenerationStatus('生成失败')
+      setTaskStatus('ai', 'error')
       setAssistantState('生成失败')
       setMessage(errorToString(error))
     }
@@ -939,6 +978,8 @@ function App() {
         candidateHistory={candidateHistory}
         selectedCandidateHistoryPath={selectedCandidateHistoryPath}
         candidateHistoryPreview={candidateHistoryPreview}
+        candidateGenerationRunning={candidateGenerationRunning}
+        candidateGenerationStatus={candidateGenerationStatus}
         tasks={tasks}
         confirmedFacts={confirmedFacts}
         confirmedFactsPath={confirmedFactsPath}
@@ -997,6 +1038,7 @@ function App() {
         onComposeBrief={() => void composeBrief()}
         onChangeWritingBrief={setWritingBrief}
         onGenerateCandidate={() => void generateCandidateDraft()}
+        onCancelCandidateGeneration={cancelCandidateGeneration}
         onChangeCandidate={(content) => void reviewCandidateDraft(content)}
         onSaveCandidate={() => void saveCandidateDraft()}
         onClearCandidate={() => void clearCandidateDraft()}
@@ -1074,6 +1116,8 @@ function App() {
           candidatePath={candidatePath}
           candidateReviewPath={candidateReviewPath}
           candidate={candidate}
+          candidateGenerationRunning={candidateGenerationRunning}
+          candidateGenerationStatus={candidateGenerationStatus}
           skillFiles={skillFiles}
           onClose={() => setAgentOpen(false)}
           onComposeBrief={() => void composeBrief()}
@@ -1103,6 +1147,7 @@ function App() {
           onChangeWritingBrief={setWritingBrief}
           onChangeCandidate={(content) => void reviewCandidateDraft(content)}
           onGenerateCandidate={() => void generateCandidateDraft()}
+          onCancelCandidateGeneration={cancelCandidateGeneration}
           onSaveCandidate={() => void saveCandidateDraft()}
           onClearCandidate={() => void clearCandidateDraft()}
           onAdoptCandidate={() => void adoptCandidateDraft('insert')}

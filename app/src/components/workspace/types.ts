@@ -51,6 +51,8 @@ export type WorkspaceProps = {
   candidateHistory: BlueprintHistorySummary[]
   selectedCandidateHistoryPath: string
   candidateHistoryPreview: string
+  candidateGenerationRunning: boolean
+  candidateGenerationStatus: string
   confirmedFacts: string
   confirmedFactsPath: string
   openLoops: string
@@ -118,6 +120,7 @@ export type WorkspaceProps = {
   onComposeBrief: () => void
   onChangeWritingBrief: (content: string) => void
   onGenerateCandidate: () => void
+  onCancelCandidateGeneration: () => void
   onChangeCandidate: (content: string) => void
   onSaveCandidate: () => void
   onClearCandidate: () => void

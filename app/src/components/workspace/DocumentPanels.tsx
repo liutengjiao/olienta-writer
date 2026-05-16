@@ -174,11 +174,24 @@ export function TasksPanel(props: WorkspaceProps) {
             <>
               <button type="button" className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
               <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>钉选材料</button>
-              <button type="button" className="primary-button" onClick={props.onGenerateCandidate}>生成候选稿</button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={props.onGenerateCandidate}
+                disabled={props.candidateGenerationRunning}
+              >
+                {props.candidateGenerationRunning ? '生成中' : '生成候选稿'}
+              </button>
+              {props.candidateGenerationRunning && (
+                <button type="button" className="ghost-button danger" onClick={props.onCancelCandidateGeneration}>
+                  取消生成
+                </button>
+              )}
             </>
           }
         />
       </section>
+      <p className="empty-note">{props.candidateGenerationStatus}</p>
       <section className="pinned-context-panel">
         <div className="panel-heading">
           <h2>钉选材料</h2>

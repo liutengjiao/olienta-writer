@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "check:copy": "node scripts/check-copy.mjs",
+    "smoke:logic": "node --experimental-strip-types scripts/logic-smoke.mjs",
     "smoke:dev": "node scripts/dev-smoke.mjs",
     "verify": "node scripts/verify.mjs",
     "preview": "vite preview",

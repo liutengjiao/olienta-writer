@@ -11,6 +11,7 @@ const steps = [
   { label: 'copy check', command: 'npm', args: ['run', 'check:copy'], cwd: appDir },
   { label: 'frontend build', command: 'npm', args: ['run', 'build'], cwd: appDir },
   { label: 'frontend lint', command: 'npm', args: ['run', 'lint'], cwd: appDir },
+  { label: 'frontend logic smoke', command: 'npm', args: ['run', 'smoke:logic'], cwd: appDir },
   { label: 'dev server smoke', command: 'npm', args: ['run', 'smoke:dev'], cwd: appDir, needsDevServer: true },
   { label: 'workflow smoke', command: 'cargo', args: ['test', 'core_writing_workflow_smoke', '--', '--nocapture'], cwd: tauriDir },
   { label: 'rust tests', command: 'cargo', args: ['test'], cwd: tauriDir },

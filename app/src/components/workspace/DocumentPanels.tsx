@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
 import type { WorkspaceProps } from './types'
 import { ChapterList, MarkdownDocument } from './EditorPanels'
+import { buildProviderExportJson } from '../../lib/providerLogic'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
   return (
@@ -669,24 +670,6 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
     useCases,
   }
 }
-
-function buildProviderExportJson(content: string) {
-  try {
-    const parsed = JSON.parse(content) as unknown
-    if (!Array.isArray(parsed)) return content
-    const sanitized = parsed.map((item) => {
-      if (!isRecord(item)) return item
-      const next = { ...item }
-      delete next.apiKey
-      delete next.apiKeyEncrypted
-      return { ...next, apiKey: '' }
-    })
-    return `${JSON.stringify(sanitized, null, 2)}\n`
-  } catch {
-    return content
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

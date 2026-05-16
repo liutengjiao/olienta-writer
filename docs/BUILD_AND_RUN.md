@@ -39,12 +39,14 @@ cd D:\windsurf\olienta\app
 npm run verify
 ```
 
-`npm run verify` runs the copy check, frontend build, lint, dev server smoke check, core writing workflow smoke check, and Rust tests.
+`npm run verify` runs the copy check, frontend build, lint, frontend logic smoke check, dev server smoke check, core writing workflow smoke check, and Rust tests.
 
 The dev server smoke check verifies:
 
 - HTML status, content type, root mount, language, and title.
 - Linked Vite entry resources are reachable.
+
+The frontend logic smoke check verifies Markdown editing commands, candidate diff logic, text statistics, and Provider JSON export redaction without needing a browser driver.
 
 The core writing workflow smoke check verifies:
 

@@ -3995,10 +3995,55 @@ fn call_openai_compatible_with_system(
 }
 
 fn generate_candidate_content(
-    _root: &Path,
+    root: &Path,
     chapter_id: &str,
     brief: &WritingBrief,
 ) -> CandidateGenerationResult {
+    if let Ok(Some(provider)) = select_chapter_provider(root) {
+        let label = provider_label(&provider);
+        let system =
+            "你是 Olienta 的整章正文 Agent。只输出当前章候选稿 Markdown，不得覆盖作者确认正文。";
+        let prompt = format!(
+            "# 章节\n\n{chapter_id}\n\n## 写作任务书\n\n{}",
+            brief.content
+        );
+        match call_openai_compatible_with_system(&provider, system, &prompt) {
+            Ok(content) if !content.trim().is_empty() => {
+                return CandidateGenerationResult {
+                    content: content.trim().to_owned(),
+                    source: label,
+                    fallback_reason: None,
+                };
+            }
+            Ok(_) => {
+                return CandidateGenerationResult {
+                    content: format!(
+                        "# 第 {chapter_id} 章候选稿\n\n根据写作任务书 `{}` 生成。\n\n{}",
+                        brief.relative_path,
+                        brief.content.lines().take(8).collect::<Vec<_>>().join("\n")
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!(
+                        "Provider 返回空内容（{label}），已生成本地占位候选稿。"
+                    )),
+                };
+            }
+            Err(error) => {
+                return CandidateGenerationResult {
+                    content: format!(
+                        "# 第 {chapter_id} 章候选稿\n\n根据写作任务书 `{}` 生成。\n\n{}",
+                        brief.relative_path,
+                        brief.content.lines().take(8).collect::<Vec<_>>().join("\n")
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!(
+                        "Provider 调用失败（{label}）：{error}。已生成本地占位候选稿。"
+                    )),
+                };
+            }
+        }
+    }
+
     CandidateGenerationResult {
         content: format!(
             "# 第 {chapter_id} 章候选稿\n\n根据写作任务书 `{}` 生成。\n\n{}",
@@ -5968,6 +6013,45 @@ mod tests {
         assert!(select_provider_for_use_case(&root, &["facts"])
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn candidate_generation_uses_chapter_provider_when_available() {
+        let (_temp, root) = create_temp_project(1);
+        let root_path = root.to_string_lossy().to_string();
+        fs::write(
+            root.join(".olienta/ai-providers.json"),
+            r#"[{
+  "id": "chapter-provider",
+  "name": "Chapter Provider",
+  "kind": "openai-compatible",
+  "enabled": true,
+  "baseUrl": "https://example.invalid/v1",
+  "apiKey": "sk-chapter",
+  "model": "chapter-model",
+  "temperature": 0.2,
+  "useCases": ["chapter"]
+}]"#,
+        )
+        .unwrap();
+
+        let draft = generate_candidate_draft(root_path, "001".to_owned()).unwrap();
+
+        assert!(draft.content.contains(
+            "Local placeholder response via openai-compatible https://example.invalid/v1 chapter-model temp=0.20"
+        ));
+        assert!(draft
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Chapter Provider (chapter-model)")));
+
+        let model_log = fs::read_to_string(root.join("logs/model-calls/history.md")).unwrap();
+        assert!(model_log.contains("Chapter Provider (chapter-model)"));
+        assert!(model_log.contains("manuscript/candidates/001.md"));
+
+        let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
+        assert!(task_history.contains("\"provider\":\"Chapter Provider (chapter-model)\""));
+        assert!(task_history.contains("\"fallbackReason\":null"));
     }
 
     #[test]

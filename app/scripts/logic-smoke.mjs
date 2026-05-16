@@ -136,6 +136,7 @@ expect('model call failure summary groups providers', failureSummary.providerGro
 expect('model call failure summary keeps recent reason', failureSummary.recentFailures[0]?.message === 'timeout', JSON.stringify(failureSummary.recentFailures))
 expect('model call failure summary groups reasons', failureSummary.reasonGroups.some((group) => group.kind === 'auth' && group.count === 1) && failureSummary.reasonGroups.some((group) => group.kind === 'timeout' && group.count === 1), JSON.stringify(failureSummary.reasonGroups))
 expect('model call failure classifier detects auth', classifyModelCallFailure(modelCallEntries[1]).kind === 'auth', JSON.stringify(modelCallEntries[1]))
+expect('model call failure classifier gives advice', classifyModelCallFailure(modelCallEntries[2]).advice.includes('超时秒数'), classifyModelCallFailure(modelCallEntries[2]).advice)
 expect('model call provider summary orders by call count', providerSummary[0]?.provider === 'Broken Provider' && providerSummary[0]?.failureRate === 100, JSON.stringify(providerSummary))
 expect('model call provider summary keeps cost and duration', providerSummary[1]?.provider === 'Chapter Provider' && providerSummary[1]?.averageDurationMs === 1200 && Math.abs(providerSummary[1]?.estimatedCostUsd - 0.0005) < 0.000001, JSON.stringify(providerSummary))
 

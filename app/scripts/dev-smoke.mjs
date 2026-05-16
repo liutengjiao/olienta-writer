@@ -34,7 +34,7 @@ const sourceContracts = [
   },
   {
     path: '/src/components/workspace/DocumentPanels.tsx',
-    includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '取消生成', '上下文窗口', '最大输出', '超时秒数', '输入百万 Token 美元', '输出百万 Token 美元', '调用次数', '平均耗时', 'Token 总量', '预估费用', '失败诊断', '失败 Provider', '错误归因', '错误类型', '最近失败', 'Provider 诊断', '失败率', '最近结果', 'providerFilter', 'failureKindFilter', 'formatFailureKind', '只看失败', '清除筛选', 'model-call-browser', 'formatModelCallStatus', 'Provider、章节、路径或结果', '导出', '选中章节', 'exportSelected', '模型调用', 'PROVIDER_USE_CASES', '导出 JSON', '导入 JSON', 'skill-meta-row', 'formatSkillCategory', 'formatSkillTag', 'buildProviderExportJson', '导出 JSON 默认不包含密钥'],
+    includes: ['章节任务书', 'writingBriefPath', 'onSaveModuleMarkdownFile', '取消生成', '上下文窗口', '最大输出', '超时秒数', '输入百万 Token 美元', '输出百万 Token 美元', '调用次数', '平均耗时', 'Token 总量', '预估费用', '失败诊断', '失败 Provider', '错误归因', '错误类型', '最近失败', 'Provider 诊断', '失败率', '最近结果', 'providerFilter', 'failureKindFilter', 'formatFailureKind', 'model-call-advice', '只看失败', '清除筛选', 'model-call-browser', 'formatModelCallStatus', 'Provider、章节、路径或结果', '导出', '选中章节', 'exportSelected', '模型调用', 'PROVIDER_USE_CASES', '导出 JSON', '导入 JSON', 'skill-meta-row', 'formatSkillCategory', 'formatSkillTag', 'buildProviderExportJson', '导出 JSON 默认不包含密钥'],
   },
   {
     path: '/src/components/workspace/KnowledgePanels.tsx',

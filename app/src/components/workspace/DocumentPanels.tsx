@@ -348,7 +348,8 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                     <span>{group.latestProvider}</span>
                   </div>
                   <b>{group.count}</b>
-                  <p>{group.latestMessage}</p>
+                  <p>{group.advice}</p>
+                  <small>{group.latestMessage}</small>
                 </button>
               ))}
             </div>
@@ -454,6 +455,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
           ) : (
             filteredEntries.slice(0, 12).map((entry) => {
               const estimatedCost = estimateModelCallCost(entry, pricingProviders)
+              const failure = classifyModelCallFailure(entry)
               return (
               <article className={`model-call-row ${entry.status}`} key={entry.id}>
                 <div className="model-call-row-head">
@@ -470,10 +472,11 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   <div><dt>耗时</dt><dd>{entry.durationMs === null ? '-' : `${entry.durationMs} ms`}</dd></div>
                   <div><dt>Token</dt><dd>{entry.totalTokens ?? '-'}</dd></div>
                   <div><dt>费用</dt><dd>{estimatedCost === null ? '-' : formatUsd(estimatedCost)}</dd></div>
-                  <div><dt>错误</dt><dd>{entry.status === 'failed' ? classifyModelCallFailure(entry).label : '-'}</dd></div>
+                  <div><dt>错误</dt><dd>{entry.status === 'failed' ? failure.label : '-'}</dd></div>
                   <div><dt>输出</dt><dd>{entry.output}</dd></div>
                 </dl>
                 <p>{entry.message}</p>
+                {entry.status === 'failed' && <p className="model-call-advice">{failure.advice}</p>}
               </article>
               )
             })

@@ -1340,7 +1340,8 @@ button:disabled {
 .model-provider-diagnostics .panel-heading span,
 .model-call-failure-panel .panel-heading span,
 .model-call-failure-card span,
-.model-call-failure-card p {
+.model-call-failure-card p,
+.model-call-failure-card small {
   color: var(--muted);
   font-size: 12px;
 }
@@ -1485,6 +1486,12 @@ button.model-call-failure-card:hover {
   line-height: 1.55;
 }
 
+.model-call-failure-card small {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .model-call-row {
   display: grid;
   gap: 10px;
@@ -1554,6 +1561,13 @@ button.model-call-failure-card:hover {
 .model-call-row dd,
 .model-call-row p {
   margin: 0;
+}
+
+.model-call-advice {
+  padding: 10px 12px;
+  border: 1px solid rgba(210, 160, 92, 0.28);
+  border-radius: 7px;
+  background: rgba(210, 160, 92, 0.08);
 }
 
 .model-call-row dd {

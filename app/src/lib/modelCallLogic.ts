@@ -64,6 +64,7 @@ export type ModelCallFailureKind =
 export type ModelCallFailureReasonGroup = {
   kind: ModelCallFailureKind
   label: string
+  advice: string
   count: number
   latestProvider: string
   latestMessage: string
@@ -216,6 +217,7 @@ export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimi
     const reasonGroup = reasonGroups.get(reason.kind) ?? {
       kind: reason.kind,
       label: reason.label,
+      advice: reason.advice,
       count: 0,
       latestProvider: entry.provider,
       latestMessage: entry.message,
@@ -238,8 +240,8 @@ export function summarizeModelCallFailures(entries: ModelCallEntry[], recentLimi
   }
 }
 
-export function classifyModelCallFailure(entry: ModelCallEntry): { kind: ModelCallFailureKind; label: string } {
-  if (entry.status !== 'failed') return { kind: 'unknown', label: '未知' }
+export function classifyModelCallFailure(entry: ModelCallEntry): { kind: ModelCallFailureKind; label: string; advice: string } {
+  if (entry.status !== 'failed') return failureInfo('unknown')
 
   const text = [
     entry.message,
@@ -247,27 +249,27 @@ export function classifyModelCallFailure(entry: ModelCallEntry): { kind: ModelCa
   ].join('\n').toLowerCase()
 
   if (matchesAny(text, ['unauthorized', 'forbidden', '401', '403', 'api key', 'apikey', 'invalid key', 'authentication', 'auth'])) {
-    return { kind: 'auth', label: '鉴权' }
+    return failureInfo('auth')
   }
   if (matchesAny(text, ['quota', 'insufficient_quota', 'billing', '余额', '额度'])) {
-    return { kind: 'quota', label: '配额' }
+    return failureInfo('quota')
   }
   if (matchesAny(text, ['rate limit', 'rate_limit', '429', 'too many requests'])) {
-    return { kind: 'rate-limit', label: '限流' }
+    return failureInfo('rate-limit')
   }
   if (matchesAny(text, ['timeout', 'timed out', 'deadline', '超时'])) {
-    return { kind: 'timeout', label: '超时' }
+    return failureInfo('timeout')
   }
   if (matchesAny(text, ['network', 'dns', 'connection', 'connect', 'socket', 'tls', 'certificate', 'proxy'])) {
-    return { kind: 'network', label: '网络' }
+    return failureInfo('network')
   }
   if (matchesAny(text, ['json', 'parse', 'deserialize', 'invalid response', 'missing choices', 'format'])) {
-    return { kind: 'response-format', label: '返回格式' }
+    return failureInfo('response-format')
   }
   if (matchesAny(text, ['provider', 'model', 'base url', 'endpoint', '404', 'not found', 'unsupported'])) {
-    return { kind: 'provider', label: 'Provider' }
+    return failureInfo('provider')
   }
-  return { kind: 'unknown', label: '未知' }
+  return failureInfo('unknown')
 }
 
 export function summarizeModelCallProviders(
@@ -380,6 +382,20 @@ function optionalNumericField(entry: string, field: string) {
 
 function positiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function failureInfo(kind: ModelCallFailureKind) {
+  const details: Record<ModelCallFailureKind, { label: string; advice: string }> = {
+    auth: { label: '鉴权', advice: '检查 API Key 是否填写、过期、权限不足，保存 Provider 后重新测试。' },
+    quota: { label: '配额', advice: '检查账户余额、账单状态或模型额度，必要时切换到备用 Provider。' },
+    'rate-limit': { label: '限流', advice: '降低连续请求频率，稍后重试，或改用限额更高的 Provider。' },
+    timeout: { label: '超时', advice: '增大 Provider 超时秒数，检查网络稳定性，或降低单次上下文和最大输出。' },
+    network: { label: '网络', advice: '检查 Base URL、代理、DNS 和证书，确认当前网络能访问该 Provider。' },
+    'response-format': { label: '返回格式', advice: '确认接口兼容 OpenAI chat/completions，并检查 Provider 返回的 choices/usage 字段。' },
+    provider: { label: 'Provider', advice: '检查模型名、Base URL、接口路径和该 Provider 是否支持当前用途。' },
+    unknown: { label: '未知', advice: '打开原始模型调用记录，查看 message，并结合 Provider 后台日志定位。' },
+  }
+  return { kind, ...details[kind] }
 }
 
 function matchesAny(value: string, patterns: string[]) {

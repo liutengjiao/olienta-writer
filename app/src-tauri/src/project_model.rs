@@ -200,11 +200,13 @@ struct AiProviderConfig {
     use_cases: Option<Vec<String>>,
 }
 
-struct CandidateGenerationResult {
+struct DraftGenerationResult {
     content: String,
     source: String,
     fallback_reason: Option<String>,
 }
+
+type CandidateGenerationResult = DraftGenerationResult;
 
 struct ModelCallLog<'a> {
     task: &'a str,
@@ -530,19 +532,53 @@ pub fn generate_blueprint_draft(
         &framework,
     );
 
-    let content = match select_provider_for_use_case(&root, &["blueprint"]) {
-        Ok(Some(provider)) => call_openai_compatible_with_system(
-            &provider,
-            "你是 Olienta 的章节蓝图 Agent。只输出当前章蓝图 Markdown 草案。不得保存，不得写正文，不得提前释放后续高潮。",
-            &prompt,
-        )
-        .unwrap_or_else(|error| local_blueprint_draft(&id, &author_input, Some(error))),
-        Ok(None) => local_blueprint_draft(
-            &id,
-            &author_input,
-            Some("没有可用的 blueprint Provider".to_owned()),
-        ),
-        Err(error) => local_blueprint_draft(&id, &author_input, Some(error.to_string())),
+    let generation = match select_provider_for_use_case(&root, &["blueprint"]) {
+        Ok(Some(provider)) => {
+            let label = provider_label(&provider);
+            match call_openai_compatible_with_system(
+                &provider,
+                "你是 Olienta 的章节蓝图 Agent。只输出当前章蓝图 Markdown 草案。不得保存，不得写正文，不得提前释放后续高潮。",
+                &prompt,
+            ) {
+                Ok(content) if !content.trim().is_empty() => DraftGenerationResult {
+                    content: content.trim().to_owned(),
+                    source: label,
+                    fallback_reason: None,
+                },
+                Ok(_) => DraftGenerationResult {
+                    content: local_blueprint_draft(
+                        &id,
+                        &author_input,
+                        Some(format!("Provider 返回空内容（{label}）")),
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!("Provider 返回空内容（{label}）")),
+                },
+                Err(error) => DraftGenerationResult {
+                    content: local_blueprint_draft(
+                        &id,
+                        &author_input,
+                        Some(format!("Provider 调用失败（{label}）：{error}")),
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!("Provider 调用失败（{label}）：{error}")),
+                },
+            }
+        }
+        Ok(None) => DraftGenerationResult {
+            content: local_blueprint_draft(
+                &id,
+                &author_input,
+                Some("没有可用的 blueprint Provider".to_owned()),
+            ),
+            source: "local-placeholder".to_owned(),
+            fallback_reason: Some("没有可用的 blueprint Provider".to_owned()),
+        },
+        Err(error) => DraftGenerationResult {
+            content: local_blueprint_draft(&id, &author_input, Some(error.to_string())),
+            source: "local-placeholder".to_owned(),
+            fallback_reason: Some(error.to_string()),
+        },
     };
 
     append_model_call_log(
@@ -550,18 +586,19 @@ pub fn generate_blueprint_draft(
         ModelCallLog {
             task: "blueprint-draft",
             chapter_id: Some(&id),
-            provider: "blueprint-provider-or-local-placeholder",
+            provider: &generation.source,
             input_path: Some("framework/ + facts/ + manuscript/author-input/当前章.md"),
             output_path: Some(&relative_path),
             ok: true,
-            message:
+            message: generation.fallback_reason.as_deref().unwrap_or(
                 "Blueprint draft generated into editor area; not saved as official blueprint yet.",
+            ),
         },
     )?;
 
     Ok(ProjectFileDocument {
         relative_path,
-        content,
+        content: generation.content,
     })
 }
 
@@ -1355,19 +1392,53 @@ pub fn generate_framework_draft(
         &other_frameworks,
     );
 
-    let content = match select_provider_for_use_case(&root, &["framework"]) {
-        Ok(Some(provider)) => call_openai_compatible_with_system(
-            &provider,
-            "你是 Olienta 的框架整理 Agent。只输出可编辑 Markdown 草案。不得声称已经保存，不得覆盖作者意愿。",
-            &prompt,
-        )
-        .unwrap_or_else(|error| local_framework_draft(&safe_name, &author_input, Some(error))),
-        Ok(None) => local_framework_draft(
-            &safe_name,
-            &author_input,
-            Some("没有可用的 framework Provider".to_owned()),
-        ),
-        Err(error) => local_framework_draft(&safe_name, &author_input, Some(error.to_string())),
+    let generation = match select_provider_for_use_case(&root, &["framework"]) {
+        Ok(Some(provider)) => {
+            let label = provider_label(&provider);
+            match call_openai_compatible_with_system(
+                &provider,
+                "你是 Olienta 的框架整理 Agent。只输出可编辑 Markdown 草案。不得声称已经保存，不得覆盖作者意愿。",
+                &prompt,
+            ) {
+                Ok(content) if !content.trim().is_empty() => DraftGenerationResult {
+                    content: content.trim().to_owned(),
+                    source: label,
+                    fallback_reason: None,
+                },
+                Ok(_) => DraftGenerationResult {
+                    content: local_framework_draft(
+                        &safe_name,
+                        &author_input,
+                        Some(format!("Provider 返回空内容（{label}）")),
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!("Provider 返回空内容（{label}）")),
+                },
+                Err(error) => DraftGenerationResult {
+                    content: local_framework_draft(
+                        &safe_name,
+                        &author_input,
+                        Some(format!("Provider 调用失败（{label}）：{error}")),
+                    ),
+                    source: "local-placeholder".to_owned(),
+                    fallback_reason: Some(format!("Provider 调用失败（{label}）：{error}")),
+                },
+            }
+        }
+        Ok(None) => DraftGenerationResult {
+            content: local_framework_draft(
+                &safe_name,
+                &author_input,
+                Some("没有可用的 framework Provider".to_owned()),
+            ),
+            source: "local-placeholder".to_owned(),
+            fallback_reason: Some("没有可用的 framework Provider".to_owned()),
+        },
+        Err(error) => DraftGenerationResult {
+            content: local_framework_draft(&safe_name, &author_input, Some(error.to_string())),
+            source: "local-placeholder".to_owned(),
+            fallback_reason: Some(error.to_string()),
+        },
     };
 
     append_model_call_log(
@@ -1375,17 +1446,19 @@ pub fn generate_framework_draft(
         ModelCallLog {
             task: "framework-draft",
             chapter_id: None,
-            provider: "framework-provider-or-local-placeholder",
+            provider: &generation.source,
             input_path: Some("framework + facts + author input"),
             output_path: Some(&relative_path),
             ok: true,
-            message: "Framework draft generated into editor area; not saved as official framework file yet.",
+            message: generation.fallback_reason.as_deref().unwrap_or(
+                "Framework draft generated into editor area; not saved as official framework file yet.",
+            ),
         },
     )?;
 
     Ok(ProjectFileDocument {
         relative_path,
-        content,
+        content: generation.content,
     })
 }
 
@@ -6215,6 +6288,65 @@ mod tests {
         let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
         assert!(task_history.contains("\"provider\":\"Chapter Provider (chapter-model)\""));
         assert!(task_history.contains("\"fallbackReason\":null"));
+    }
+
+    #[test]
+    fn blueprint_and_framework_generation_log_selected_provider() {
+        let (_temp, root) = create_temp_project(1);
+        let root_path = root.to_string_lossy().to_string();
+        let (blueprint_url, _blueprint_receiver) = spawn_chat_completion_server(
+            r##"{"choices":[{"message":{"content":"# Provider Blueprint\n\nModel planned the chapter."}}]}"##,
+        );
+        let (framework_url, _framework_receiver) = spawn_chat_completion_server(
+            r##"{"choices":[{"message":{"content":"# Provider Framework\n\nModel shaped the premise."}}]}"##,
+        );
+        fs::write(
+            root.join(".olienta/ai-providers.json"),
+            format!(
+                r#"[{{
+  "id": "blueprint-provider",
+  "name": "Blueprint Provider",
+  "kind": "openai-compatible",
+  "enabled": true,
+  "baseUrl": "{blueprint_url}",
+  "apiKey": "sk-blueprint",
+  "model": "blueprint-model",
+  "useCases": ["blueprint"]
+}}, {{
+  "id": "framework-provider",
+  "name": "Framework Provider",
+  "kind": "openai-compatible",
+  "enabled": true,
+  "baseUrl": "{framework_url}",
+  "apiKey": "sk-framework",
+  "model": "framework-model",
+  "useCases": ["framework"]
+}}]"#
+            ),
+        )
+        .unwrap();
+
+        let blueprint = generate_blueprint_draft(
+            root_path.clone(),
+            "001".to_owned(),
+            "Keep the clue unresolved.".to_owned(),
+        )
+        .unwrap();
+        assert!(blueprint.content.contains("# Provider Blueprint"));
+
+        let framework = generate_framework_draft(
+            root_path,
+            "02-premise.md".to_owned(),
+            "Clarify the main premise.".to_owned(),
+        )
+        .unwrap();
+        assert!(framework.content.contains("# Provider Framework"));
+
+        let model_log = fs::read_to_string(root.join("logs/model-calls/history.md")).unwrap();
+        assert!(model_log.contains("Blueprint Provider (blueprint-model)"));
+        assert!(model_log.contains("Framework Provider (framework-model)"));
+        assert!(!model_log.contains("blueprint-provider-or-local-placeholder"));
+        assert!(!model_log.contains("framework-provider-or-local-placeholder"));
     }
 
     #[test]

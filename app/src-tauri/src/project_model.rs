@@ -4627,6 +4627,8 @@ fn docx_document_xml(markdown: &str) -> String {
     let mut paragraphs = String::new();
     let mut list_index = 0;
     let mut heading_one_count = 0;
+    let mut in_code_block = false;
+    let mut code_lines = Vec::new();
     let metadata = docx_metadata(markdown);
 
     paragraphs.push_str(&docx_cover_xml(&metadata));
@@ -4634,7 +4636,32 @@ fn docx_document_xml(markdown: &str) -> String {
 
     for raw_line in markdown.lines() {
         let line = raw_line.trim();
-        if line.is_empty() || line.starts_with("```") {
+        if line.starts_with("```") {
+            if in_code_block {
+                paragraphs.push_str(&docx_paragraph(
+                    "CodeBlock",
+                    &code_lines.join("\n"),
+                    false,
+                    false,
+                    0,
+                    false,
+                ));
+                code_lines.clear();
+                in_code_block = false;
+            } else {
+                in_code_block = true;
+            }
+            continue;
+        }
+        if in_code_block {
+            code_lines.push(raw_line.to_owned());
+            continue;
+        }
+        if line.is_empty() {
+            continue;
+        }
+        if line == "---" || line == "***" {
+            paragraphs.push_str(&docx_horizontal_rule_paragraph());
             continue;
         }
 
@@ -4650,7 +4677,21 @@ fn docx_document_xml(markdown: &str) -> String {
                 ("Quote", text.trim(), false, false, false)
             } else if let Some(text) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
                 list_index += 1;
-                ("Normal", text.trim(), false, true, false)
+                paragraphs.push_str(&docx_marked_paragraph(
+                    "BulletList",
+                    text.trim(),
+                    "•",
+                    false,
+                ));
+                continue;
+            } else if let Some((number, text)) = markdown_numbered_item(line) {
+                paragraphs.push_str(&docx_marked_paragraph(
+                    "NumberedList",
+                    text,
+                    &format!("{number}."),
+                    false,
+                ));
+                continue;
             } else {
                 ("Normal", line, true, false, false)
             };
@@ -4662,6 +4703,16 @@ fn docx_document_xml(markdown: &str) -> String {
             bullet,
             list_index,
             page_break_before,
+        ));
+    }
+    if in_code_block && !code_lines.is_empty() {
+        paragraphs.push_str(&docx_paragraph(
+            "CodeBlock",
+            &code_lines.join("\n"),
+            false,
+            false,
+            0,
+            false,
         ));
     }
 
@@ -4761,6 +4812,35 @@ fn docx_page_break_paragraph() -> String {
     r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"#.to_owned()
 }
 
+fn markdown_numbered_item(line: &str) -> Option<(usize, &str)> {
+    let (number, rest) = line.split_once('.')?;
+    if number.is_empty() || !number.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let text = rest.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some((number.parse::<usize>().ok()?, text))
+}
+
+fn docx_horizontal_rule_paragraph() -> String {
+    r#"<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="8" w:color="999999"/></w:pBdr><w:spacing w:before="120" w:after="120"/></w:pPr></w:p>"#.to_owned()
+}
+
+fn docx_marked_paragraph(style: &str, text: &str, marker: &str, page_break_before: bool) -> String {
+    let marker = xml_escape(marker);
+    let runs = docx_text_runs(&strip_markdown_inline(text));
+    let page_break_xml = if page_break_before {
+        r#"<w:pageBreakBefore/>"#
+    } else {
+        ""
+    };
+    format!(
+        r#"<w:p><w:pPr><w:pStyle w:val="{style}"/>{page_break_xml}<w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs><w:ind w:left="720" w:hanging="360"/></w:pPr><w:r><w:t>{marker}</w:t><w:tab/></w:r>{runs}</w:p>"#
+    )
+}
+
 fn docx_paragraph(
     style: &str,
     text: &str,
@@ -4792,10 +4872,23 @@ fn docx_paragraph(
     } else {
         escaped
     };
+    let runs = docx_text_runs(&bullet_text);
 
-    format!(
-        r#"<w:p><w:pPr>{style_xml}{page_break_xml}{indent_xml}</w:pPr><w:r><w:t>{bullet_text}</w:t></w:r></w:p>"#
-    )
+    format!(r#"<w:p><w:pPr>{style_xml}{page_break_xml}{indent_xml}</w:pPr>{runs}</w:p>"#)
+}
+
+fn docx_text_runs(text: &str) -> String {
+    let mut runs = String::new();
+    for (index, line) in text.split('\n').enumerate() {
+        if index > 0 {
+            runs.push_str("<w:r><w:br/></w:r>");
+        }
+        let escaped = xml_escape(line);
+        runs.push_str(&format!(
+            r#"<w:r><w:t xml:space="preserve">{escaped}</w:t></w:r>"#
+        ));
+    }
+    runs
 }
 
 fn docx_document_rels_xml() -> String {
@@ -4904,6 +4997,22 @@ fn docx_styles_xml() -> String {
     <w:basedOn w:val="Normal"/>
     <w:pPr><w:ind w:left="420"/></w:pPr>
     <w:rPr><w:i/><w:color w:val="666666"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="BulletList">
+    <w:name w:val="BulletList"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:ind w:left="720" w:hanging="360"/><w:spacing w:after="80"/></w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="NumberedList">
+    <w:name w:val="NumberedList"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:ind w:left="720" w:hanging="360"/><w:spacing w:after="80"/></w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="CodeBlock">
+    <w:name w:val="CodeBlock"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:ind w:left="420"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="SimSun"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr>
   </w:style>
 </w:styles>"#
         .to_owned()
@@ -6387,7 +6496,7 @@ mod tests {
     #[test]
     fn docx_export_includes_manuscript_layout_parts() {
         let bytes = markdown_to_docx(
-            "# 测试作品\n\n第一段正文。\n\n# 第二章\n\n第二章正文。\n\n> 引用内容\n\n- 列表项",
+            "# 测试作品\n\n第一段正文。\n\n---\n\n# 第二章\n\n第二章正文。\n\n> 引用内容\n\n- 列表项\n\n1. numbered item\n\n```\nlet total = 1;\nreturn total;\n```\n",
         )
         .unwrap();
 
@@ -6413,10 +6522,20 @@ mod tests {
         assert!(document.contains("1. 测试作品"));
         assert!(document.contains("2. 第二章"));
         assert!(document.contains(r#"<w:br w:type="page"/>"#));
+        assert!(document.contains(r#"<w:pStyle w:val="BulletList"/>"#));
+        assert!(document.contains(r#"<w:pStyle w:val="NumberedList"/>"#));
+        assert!(document.contains(r#"<w:pStyle w:val="CodeBlock"/>"#));
+        assert!(document.contains(r#"<w:pBdr>"#));
+        assert!(document.contains(r#"<w:br/>"#));
+        assert!(document.contains("let total = 1;"));
+        assert!(document.contains("return total;"));
         assert!(styles.contains(r#"w:eastAsia="SimSun""#));
         assert!(styles.contains(r#"w:line="360""#));
         assert!(styles.contains(r#"w:styleId="Title""#));
         assert!(styles.contains(r#"w:styleId="TocEntry""#));
+        assert!(styles.contains(r#"w:styleId="BulletList""#));
+        assert!(styles.contains(r#"w:styleId="NumberedList""#));
+        assert!(styles.contains(r#"w:styleId="CodeBlock""#));
         assert!(header.contains("Olienta 作品导出"));
         assert!(footer.contains(" PAGE "));
     }

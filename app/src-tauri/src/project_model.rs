@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -218,6 +218,7 @@ struct ModelCallLog<'a> {
     input_path: Option<&'a str>,
     output_path: Option<&'a str>,
     ok: bool,
+    duration_ms: Option<u128>,
     message: &'a str,
 }
 
@@ -535,6 +536,7 @@ pub fn generate_blueprint_draft(
         &framework,
     );
 
+    let started_at = Instant::now();
     let generation = match select_provider_for_use_case(&root, &["blueprint"]) {
         Ok(Some(provider)) => {
             let label = provider_label(&provider);
@@ -593,6 +595,7 @@ pub fn generate_blueprint_draft(
             input_path: Some("framework/ + facts/ + manuscript/author-input/当前章.md"),
             output_path: Some(&relative_path),
             ok: true,
+            duration_ms: Some(started_at.elapsed().as_millis()),
             message: generation.fallback_reason.as_deref().unwrap_or(
                 "Blueprint draft generated into editor area; not saved as official blueprint yet.",
             ),
@@ -949,6 +952,7 @@ pub fn generate_candidate_draft(
     root_path: String,
     chapter_id: String,
 ) -> Result<CandidateDraft, ProjectError> {
+    let started_at = Instant::now();
     let brief = compose_writing_brief(root_path.clone(), chapter_id)?;
     let root = PathBuf::from(root_path);
     let id = normalize_chapter_id(&brief.chapter_id);
@@ -974,6 +978,7 @@ pub fn generate_candidate_draft(
             input_path: Some(&brief.relative_path),
             output_path: Some(&relative_path),
             ok: true,
+            duration_ms: Some(started_at.elapsed().as_millis()),
             message: generation
                 .fallback_reason
                 .as_deref()
@@ -1263,6 +1268,7 @@ pub fn save_ai_providers(
 
 pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, ProjectError> {
     let root = PathBuf::from(root_path);
+    let started_at = Instant::now();
     let result: ProviderTestResult = match select_chapter_provider(&root) {
         Ok(Some(provider)) => {
             let label = provider_label(&provider);
@@ -1299,6 +1305,7 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
             input_path: Some(".olienta/ai-providers.json"),
             output_path: Some("logs/model-calls/history.md"),
             ok: result.ok,
+            duration_ms: Some(started_at.elapsed().as_millis()),
             message: &result.message,
         },
     )?;
@@ -1395,6 +1402,7 @@ pub fn generate_framework_draft(
         &other_frameworks,
     );
 
+    let started_at = Instant::now();
     let generation = match select_provider_for_use_case(&root, &["framework"]) {
         Ok(Some(provider)) => {
             let label = provider_label(&provider);
@@ -1453,6 +1461,7 @@ pub fn generate_framework_draft(
             input_path: Some("framework + facts + author input"),
             output_path: Some(&relative_path),
             ok: true,
+            duration_ms: Some(started_at.elapsed().as_millis()),
             message: generation.fallback_reason.as_deref().unwrap_or(
                 "Framework draft generated into editor area; not saved as official framework file yet.",
             ),
@@ -3808,13 +3817,16 @@ fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), Proje
     let mut content =
         fs::read_to_string(&target).unwrap_or_else(|_| "# Model Call History\n\n".to_owned());
     content.push_str(&format!(
-        "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- message: {}\n",
+        "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- durationMs: {}\n- message: {}\n",
         log.task,
         if log.ok { "ok" } else { "failed" },
         log.provider,
         log.chapter_id.unwrap_or("-"),
         log.input_path.unwrap_or("-"),
         log.output_path.unwrap_or("-"),
+        log.duration_ms
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "-".to_owned()),
         log.message
     ));
     atomic_write_text(&target, &content)?;
@@ -6302,6 +6314,7 @@ mod tests {
         let model_log = fs::read_to_string(root.join("logs/model-calls/history.md")).unwrap();
         assert!(model_log.contains("Chapter Provider (chapter-model)"));
         assert!(model_log.contains("manuscript/candidates/001.md"));
+        assert!(model_log.contains("durationMs:"));
 
         let task_history = fs::read_to_string(root.join("tasks/history.jsonl")).unwrap();
         assert!(task_history.contains("\"provider\":\"Chapter Provider (chapter-model)\""));
@@ -6363,6 +6376,7 @@ mod tests {
         let model_log = fs::read_to_string(root.join("logs/model-calls/history.md")).unwrap();
         assert!(model_log.contains("Blueprint Provider (blueprint-model)"));
         assert!(model_log.contains("Framework Provider (framework-model)"));
+        assert!(model_log.contains("durationMs:"));
         assert!(!model_log.contains("blueprint-provider-or-local-placeholder"));
         assert!(!model_log.contains("framework-provider-or-local-placeholder"));
     }

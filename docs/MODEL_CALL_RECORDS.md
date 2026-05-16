@@ -18,6 +18,7 @@ logs/model-calls/history.md
 - 章节号。
 - 输入文件路径，例如章节写作任务书。
 - 输出文件路径，例如候选稿。
+- 调用耗时 `durationMs`。
 - 结果说明或降级原因。
 
 ## 安全边界
@@ -31,7 +32,6 @@ logs/model-calls/history.md
 
 后续可以增加：
 
-- 耗时。
 - Token 用量。
 - 费用估算。
 - 模型温度和上下文长度。

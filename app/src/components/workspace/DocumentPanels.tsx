@@ -320,7 +320,11 @@ export function ModelCallsPanel(props: WorkspaceProps) {
       <section className="model-call-failure-panel">
         <div className="panel-heading">
           <h2>失败诊断</h2>
-          <span>{failureSummary.totalFailed} 条失败调用</span>
+          <div className="model-call-panel-actions">
+            <span>{failureSummary.totalFailed} 条失败调用</span>
+            <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+            <button type="button" className="ghost-button" onClick={props.onOpenModelProviders}>Provider 配置</button>
+          </div>
         </div>
         {failureSummary.totalFailed === 0 ? (
           <p className="empty-note">当前模型调用日志里没有失败记录。</p>
@@ -476,7 +480,15 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   <div><dt>输出</dt><dd>{entry.output}</dd></div>
                 </dl>
                 <p>{entry.message}</p>
-                {entry.status === 'failed' && <p className="model-call-advice">{failure.advice}</p>}
+                {entry.status === 'failed' && (
+                  <div className="model-call-advice">
+                    <p>{failure.advice}</p>
+                    <div className="editor-actions">
+                      <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+                      <button type="button" className="ghost-button" onClick={props.onOpenModelProviders}>Provider 配置</button>
+                    </div>
+                  </div>
+                )}
               </article>
               )
             })

@@ -1337,6 +1337,15 @@ button:disabled {
   gap: 12px;
 }
 
+.model-call-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .model-provider-diagnostics .panel-heading span,
 .model-call-failure-panel .panel-heading span,
 .model-call-failure-card span,
@@ -1564,10 +1573,16 @@ button.model-call-failure-card:hover {
 }
 
 .model-call-advice {
+  display: grid;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid rgba(210, 160, 92, 0.28);
   border-radius: 7px;
   background: rgba(210, 160, 92, 0.08);
+}
+
+.model-call-advice p {
+  margin: 0;
 }
 
 .model-call-row dd {

@@ -130,6 +130,7 @@ export type WorkspaceProps = {
   onChangeAiProvidersJson: (content: string) => void
   onSaveAiProviders: () => void
   onTestAiProvider: () => void
+  onOpenModelProviders: () => void
   onLoadSkillFile: (fileName: string) => void
   onImportSkillFile: () => void
   onSetSkillDisabled: (fileName: string, disabled: boolean) => void

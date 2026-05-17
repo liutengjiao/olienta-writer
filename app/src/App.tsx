@@ -1083,6 +1083,10 @@ function App() {
         onChangeAiProvidersJson={setAiProvidersJson}
         onSaveAiProviders={() => void saveAiProviders()}
         onTestAiProvider={() => void testAiProvider()}
+        onOpenModelProviders={() => {
+          setActiveModule('model-calls')
+          setActiveModuleView('model-providers')
+        }}
         onToggleFocusMode={toggleFocusMode}
         onExportProject={(format, scope, chapterIds) => void exportProject(format, scope, chapterIds)}
       />

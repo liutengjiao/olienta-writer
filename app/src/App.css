@@ -1346,6 +1346,12 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.model-call-refresh-note {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .model-provider-diagnostics .panel-heading span,
 .model-call-failure-panel .panel-heading span,
 .model-call-failure-card span,

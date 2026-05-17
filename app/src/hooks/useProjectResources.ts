@@ -8,6 +8,7 @@ import type {
   ProjectHealthReport,
   ProjectSummary,
   ProjectVaultEntry,
+  ProviderTestResult,
   SkillFileSummary,
   TimelineSettings,
 } from '../types'
@@ -141,7 +142,7 @@ export function useProjectResources({
       setAiProvidersPath(saved.relative_path)
       setAiProvidersJson(saved.content)
       await loadMarkdownFiles(project.root_path)
-      await loadMarkdownFile(project.root_path, 'tasks/history.jsonl')
+      await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
       setAssistantState('AI 配置已保存')
       setMessage('AI Provider 配置已保存。')
       return true
@@ -152,7 +153,7 @@ export function useProjectResources({
     }
   }
 
-  async function testAiProvider() {
+  async function testAiProvider(): Promise<ProviderTestResult | null | void> {
     if (!project) {
       setMessage('请先创建或打开项目。')
       return
@@ -178,11 +179,13 @@ export function useProjectResources({
         `${result.ok ? '可用' : '不可用'} · ${result.provider} · ${result.message}`,
       )
       await loadMarkdownFiles(project.root_path)
-      await loadMarkdownFile(project.root_path, 'tasks/history.jsonl')
+      await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
       setAssistantState(result.ok ? 'Provider 可用' : 'Provider 不可用')
+      return result
     } catch (error) {
       setProviderTestMessage(errorToString(error))
       setAssistantState('测试失败')
+      return null
     }
   }
 

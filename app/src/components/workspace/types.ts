@@ -10,6 +10,7 @@ import type {
   ProjectSearchResult,
   ProjectSummary,
   ProjectVaultEntry,
+  ProviderTestResult,
   RecentProject,
   SkillFileSummary,
   TaskItem,
@@ -129,7 +130,7 @@ export type WorkspaceProps = {
   onRestoreCandidateHistory: () => void
   onChangeAiProvidersJson: (content: string) => void
   onSaveAiProviders: () => void
-  onTestAiProvider: () => void
+  onTestAiProvider: () => Promise<ProviderTestResult | null | void>
   onOpenModelProviders: () => void
   onLoadSkillFile: (fileName: string) => void
   onImportSkillFile: () => void

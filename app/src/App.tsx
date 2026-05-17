@@ -1082,7 +1082,7 @@ function App() {
         onRescanFacts={() => void rescanFacts()}
         onChangeAiProvidersJson={setAiProvidersJson}
         onSaveAiProviders={() => void saveAiProviders()}
-        onTestAiProvider={() => void testAiProvider()}
+        onTestAiProvider={testAiProvider}
         onOpenModelProviders={() => {
           setActiveModule('model-calls')
           setActiveModuleView('model-providers')

@@ -255,6 +255,8 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const [providerFilter, setProviderFilter] = useState('all')
   const [failureKindFilter, setFailureKindFilter] = useState('all')
   const [query, setQuery] = useState('')
+  const [providerTesting, setProviderTesting] = useState(false)
+  const [testRefreshNote, setTestRefreshNote] = useState('')
   const defaultPath = 'logs/model-calls/history.md'
   const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
   const summary = useMemo(() => summarizeModelCallHistory(props.markdownPreview), [props.markdownPreview])
@@ -277,6 +279,27 @@ export function ModelCallsPanel(props: WorkspaceProps) {
     setProviderFilter('all')
     setFailureKindFilter('all')
     setQuery('')
+  }
+
+  async function runProviderTestAndRefresh() {
+    if (providerTesting) return
+
+    setProviderTesting(true)
+    setTestRefreshNote('正在运行 Provider 测试...')
+    try {
+      const result = await props.onTestAiProvider()
+      props.onLoadMarkdownFile(defaultPath)
+      clearModelCallFilters()
+      if (result?.ok === false) {
+        setStatusFilter('failed')
+        if (result.provider) setProviderFilter(result.provider)
+      }
+      setTestRefreshNote(result?.ok === false
+        ? '测试完成，已刷新模型调用历史并筛到本次失败 Provider。'
+        : '测试完成，已刷新模型调用历史；列表顶部显示最新记录。')
+    } finally {
+      setProviderTesting(false)
+    }
   }
 
   function drillIntoProvider(provider: string, status = 'all') {
@@ -306,9 +329,13 @@ export function ModelCallsPanel(props: WorkspaceProps) {
         <strong>{props.providerTestMessage}</strong>
         <p>{props.aiProvidersPath}</p>
         <div className="editor-actions">
-          <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+          <button type="button" className="ghost-button" onClick={() => void runProviderTestAndRefresh()} disabled={providerTesting}>
+            {providerTesting ? '测试中' : '运行测试'}
+          </button>
           <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(defaultPath)}>打开历史</button>
+          <button type="button" className="ghost-button" onClick={clearModelCallFilters}>最新记录</button>
         </div>
+        {testRefreshNote && <p className="model-call-refresh-note">{testRefreshNote}</p>}
       </div>
       <div className="health-strip">
         <article><span>调用次数</span><strong>{summary.callCount}</strong></article>
@@ -322,7 +349,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
           <h2>失败诊断</h2>
           <div className="model-call-panel-actions">
             <span>{failureSummary.totalFailed} 条失败调用</span>
-            <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+            <button type="button" className="ghost-button" onClick={() => void runProviderTestAndRefresh()} disabled={providerTesting}>
+              {providerTesting ? '测试中' : '运行测试'}
+            </button>
             <button type="button" className="ghost-button" onClick={props.onOpenModelProviders}>Provider 配置</button>
           </div>
         </div>
@@ -484,7 +513,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                   <div className="model-call-advice">
                     <p>{failure.advice}</p>
                     <div className="editor-actions">
-                      <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>运行测试</button>
+                      <button type="button" className="ghost-button" onClick={() => void runProviderTestAndRefresh()} disabled={providerTesting}>
+                        {providerTesting ? '测试中' : '运行测试'}
+                      </button>
                       <button type="button" className="ghost-button" onClick={props.onOpenModelProviders}>Provider 配置</button>
                     </div>
                   </div>

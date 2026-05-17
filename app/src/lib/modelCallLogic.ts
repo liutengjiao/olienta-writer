@@ -8,6 +8,7 @@ export type ModelCallSummary = {
 
 export type ModelCallEntry = {
   id: string
+  logEntryId: string
   task: string
   status: string
   provider: string
@@ -144,6 +145,7 @@ export function filterModelCallEntries(
     if (query.length > 0) {
       const haystack = [
         entry.task,
+        entry.logEntryId,
         entry.status,
         entry.provider,
         entry.chapter,
@@ -340,6 +342,7 @@ function parseModelCallEntry(entry: string, index: number): ModelCallEntry {
   const task = entry.match(/^##\s+(.+)$/m)?.[1]?.trim() ?? `call-${index + 1}`
   return {
     id: `${index}-${task}`,
+    logEntryId: fieldValue(entry, 'id') || `${index}-${task}`,
     task,
     status: fieldValue(entry, 'status') || 'unknown',
     provider: fieldValue(entry, 'provider') || '-',

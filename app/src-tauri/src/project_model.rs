@@ -80,10 +80,12 @@ pub struct CandidateDraft {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderTestResult {
     pub ok: bool,
     pub provider: String,
     pub message: String,
+    pub log_entry_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1301,12 +1303,14 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
                         ok: true,
                         provider: label,
                         message: trim_for_status(&result.content),
+                        log_entry_id: None,
                     }
                 }
                 Err(error) => ProviderTestResult {
                     ok: false,
                     provider: label,
                     message: error,
+                    log_entry_id: None,
                 },
             }
         }
@@ -1314,14 +1318,16 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
             ok: false,
             provider: "none".to_owned(),
             message: "没有启用的 OpenAI-compatible Provider。".to_owned(),
+            log_entry_id: None,
         },
         Err(error) => ProviderTestResult {
             ok: false,
             provider: "invalid-config".to_owned(),
             message: error.to_string(),
+            log_entry_id: None,
         },
     };
-    append_model_call_log(
+    let log_entry_id = append_model_call_log(
         &root,
         ModelCallLog {
             task: "provider-test",
@@ -1335,6 +1341,10 @@ pub fn test_ai_provider(root_path: String) -> Result<ProviderTestResult, Project
             message: &result.message,
         },
     )?;
+    let result = ProviderTestResult {
+        log_entry_id: Some(log_entry_id),
+        ..result
+    };
     append_workflow_task_history(
         &root,
         "provider_tested",
@@ -3843,14 +3853,16 @@ fn read_classified_fact_files(root: &Path) -> Result<String, ProjectError> {
     Ok(content)
 }
 
-fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), ProjectError> {
+fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<String, ProjectError> {
     fs::create_dir_all(ensure_project_path(root, "logs/model-calls")?)?;
     let target = ensure_project_path(root, "logs/model-calls/history.md")?;
     let mut content =
         fs::read_to_string(&target).unwrap_or_else(|_| "# Model Call History\n\n".to_owned());
+    let entry_id = model_call_log_entry_id(log.task);
     content.push_str(&format!(
-        "\n## {}\n\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- durationMs: {}\n- promptTokens: {}\n- completionTokens: {}\n- totalTokens: {}\n- message: {}\n",
+        "\n## {}\n\n- id: {}\n- status: {}\n- provider: {}\n- chapter: {}\n- input: {}\n- output: {}\n- durationMs: {}\n- promptTokens: {}\n- completionTokens: {}\n- totalTokens: {}\n- message: {}\n",
         log.task,
+        entry_id,
         if log.ok { "ok" } else { "failed" },
         log.provider,
         log.chapter_id.unwrap_or("-"),
@@ -3865,7 +3877,25 @@ fn append_model_call_log(root: &Path, log: ModelCallLog<'_>) -> Result<(), Proje
         log.message
     ));
     atomic_write_text(&target, &content)?;
-    Ok(())
+    Ok(entry_id)
+}
+
+fn model_call_log_entry_id(task: &str) -> String {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_millis(0))
+        .as_millis();
+    let safe_task: String = task
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    format!("{safe_task}-{millis}")
 }
 
 fn format_optional_u64(value: Option<u64>) -> String {

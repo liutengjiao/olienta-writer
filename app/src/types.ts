@@ -72,6 +72,7 @@ export type ProviderTestResult = {
   ok: boolean
   provider: string
   message: string
+  logEntryId?: string
 }
 
 export type RecentProject = {

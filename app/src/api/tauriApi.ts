@@ -3,9 +3,14 @@ import { open } from '@tauri-apps/plugin-dialog'
 import type {
   BlueprintHistorySummary,
   CandidateDraft,
+  CandidateFactAdoptionResult,
+  CandidateReviewIssue,
+  AiChatInput,
+  AiChatResult,
   ChapterDocument,
   ChapterSummary,
   CreateProjectInput,
+  DeconstructionImportResult,
   ExportInput,
   FrameworkFileSummary,
   ImportReferenceBatchResult,
@@ -17,10 +22,12 @@ import type {
   ProjectSearchResult,
   ProjectSummary,
   ProjectVaultEntry,
+  ProviderBatchTestResult,
   ProviderTestResult,
   RecentProject,
   SkillFileSummary,
   TimelineSettings,
+  VolumeInfo,
   WritingBrief,
 } from '../types'
 
@@ -38,8 +45,18 @@ export async function chooseSkillFile() {
   const selected = await open({
     directory: false,
     multiple: false,
-    title: '选择 Skill Markdown 文件',
-    filters: [{ name: 'Markdown', extensions: ['md'] }],
+    title: '选择 Skill Markdown 文件（.md / .markdown）',
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+export async function chooseSkillFolder() {
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: '选择 Skill 文件夹（包含 SKILL.md）',
   })
 
   return typeof selected === 'string' ? selected : null
@@ -51,6 +68,39 @@ export async function chooseReferenceFile() {
     multiple: false,
     title: '选择要导入到当前作品的 Markdown/TXT 资料',
     filters: [{ name: 'Markdown 或 TXT', extensions: ['md', 'markdown', 'txt'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+export async function chooseChapterMarkdownFile() {
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    title: '选择要导入为当前章节正文的 Markdown/TXT 文件',
+    filters: [{ name: 'Markdown 或 TXT', extensions: ['md', 'markdown', 'txt'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+export async function chooseNovelStructureFile() {
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    title: '选择要导入到小说结构的 Markdown/TXT/Word 文件',
+    filters: [{ name: 'Markdown、TXT 或 Word', extensions: ['md', 'markdown', 'txt', 'docx'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+export async function chooseBlueprintBundleFile() {
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    title: '选择包含多章蓝图的 Markdown/TXT/Word 文件',
+    filters: [{ name: 'Markdown、TXT 或 Word', extensions: ['md', 'markdown', 'txt', 'docx'] }],
   })
 
   return typeof selected === 'string' ? selected : null
@@ -74,8 +124,20 @@ export function openProject(rootPath: string) {
   return invoke<ProjectSummary>('open_project', { rootPath })
 }
 
+export function listKnownProjects() {
+  return invoke<ProjectSummary[]>('list_known_projects')
+}
+
 export function listChapters(rootPath: string) {
   return invoke<ChapterSummary[]>('list_chapters', { rootPath })
+}
+
+export function loadVolumes(rootPath: string) {
+  return invoke<VolumeInfo[]>('load_volumes', { rootPath })
+}
+
+export function saveVolumes(rootPath: string, volumes: VolumeInfo[]) {
+  return invoke<VolumeInfo[]>('save_volumes', { rootPath, volumes })
 }
 
 export function loadChapter(rootPath: string, chapterId: string) {
@@ -84,6 +146,14 @@ export function loadChapter(rootPath: string, chapterId: string) {
 
 export function saveChapter(rootPath: string, chapterId: string, content: string) {
   return invoke<ChapterDocument>('save_chapter', { rootPath, chapterId, content })
+}
+
+export function importChapterMarkdown(rootPath: string, chapterId: string, sourcePath: string) {
+  return invoke<ChapterDocument>('import_chapter_markdown', { rootPath, chapterId, sourcePath })
+}
+
+export function readImportedDocument(sourcePath: string) {
+  return invoke<string>('read_imported_document', { sourcePath })
 }
 
 export function loadAuthorInput(rootPath: string, chapterId: string) {
@@ -106,8 +176,22 @@ export function loadCandidate(rootPath: string, chapterId: string) {
   return invoke<ProjectFileDocument>('load_candidate', { rootPath, chapterId })
 }
 
-export function saveCandidate(rootPath: string, chapterId: string, content: string) {
-  return invoke<ProjectFileDocument>('save_candidate', { rootPath, chapterId, content })
+export function saveCandidate(
+  rootPath: string,
+  chapterId: string,
+  content: string,
+  restoredFromHistoryPath?: string,
+  restoredFromConfirmationPath?: string,
+  restoredFromConfirmationEntryId?: string,
+) {
+  return invoke<ProjectFileDocument>('save_candidate', {
+    rootPath,
+    chapterId,
+    content,
+    restoredFromHistoryPath,
+    restoredFromConfirmationPath,
+    restoredFromConfirmationEntryId,
+  })
 }
 
 export function generateBlueprintDraft(rootPath: string, chapterId: string, authorInput: string) {
@@ -138,26 +222,60 @@ export function loadCandidateHistory(rootPath: string, relativePath: string) {
   return invoke<ProjectFileDocument>('load_candidate_history', { rootPath, relativePath })
 }
 
+export function recordCandidateHistoryRestore(
+  rootPath: string,
+  chapterId: string,
+  historyPath: string,
+  candidatePath: string,
+  confirmationPath?: string,
+  confirmationEntryId?: string,
+) {
+  return invoke<ProjectFileDocument>('record_candidate_history_restore', {
+    rootPath,
+    chapterId,
+    historyPath,
+    candidatePath,
+    confirmationPath,
+    confirmationEntryId,
+  })
+}
+
 export function composeWritingBrief(rootPath: string, chapterId: string) {
   return invoke<WritingBrief>('compose_writing_brief', { rootPath, chapterId })
 }
 
-export function generateCandidateDraft(rootPath: string, chapterId: string) {
-  return invoke<CandidateDraft>('generate_candidate_draft', { rootPath, chapterId })
+export function generateCandidateDraft(rootPath: string, chapterId: string, requestId?: string) {
+  return invoke<CandidateDraft>('generate_candidate_draft', { rootPath, chapterId, requestId })
+}
+
+export function cancelAiRequest(requestId: string) {
+  return invoke<boolean>('cancel_ai_request', { requestId })
+}
+
+export function aiChat(input: AiChatInput) {
+  return invoke<AiChatResult>('ai_chat', { input })
+}
+
+export function loadAgentChatHistory(rootPath: string) {
+  return invoke<ProjectFileDocument>('load_agent_chat_history', { rootPath })
+}
+
+export function saveAgentChatHistory(rootPath: string, content: string) {
+  return invoke<ProjectFileDocument>('save_agent_chat_history', { rootPath, content })
 }
 
 export function reviewCandidateDraft(content: string) {
-  return invoke<string[]>('review_candidate_draft', { content })
+  return invoke<CandidateReviewIssue[]>('review_candidate_draft', { content })
 }
 
 export function reviewCandidateDraftForChapter(rootPath: string, chapterId: string, content: string) {
-  return invoke<string[]>('review_candidate_draft_for_chapter', { rootPath, chapterId, content })
+  return invoke<CandidateReviewIssue[]>('review_candidate_draft_for_chapter', { rootPath, chapterId, content })
 }
 
 export function recordCandidateAdoption(
   rootPath: string,
   chapterId: string,
-  mode: 'replace' | 'append' | 'insert',
+  mode: 'replace' | 'append' | 'insert' | 'replace-paragraph' | 'undo-replace-paragraph',
   candidatePath: string,
   manuscriptPath: string,
 ) {
@@ -188,6 +306,10 @@ export function saveKnowledgeFile(
   return invoke<ProjectFileDocument>('save_knowledge_file', { rootPath, kind, content })
 }
 
+export function adoptCandidateFactDraft(rootPath: string, draftPath: string) {
+  return invoke<CandidateFactAdoptionResult>('adopt_candidate_fact_draft', { rootPath, draftPath })
+}
+
 export function loadAiProviders(rootPath: string) {
   return invoke<ProjectFileDocument>('load_ai_providers', { rootPath })
 }
@@ -200,12 +322,20 @@ export function testAiProvider(rootPath: string) {
   return invoke<ProviderTestResult>('test_ai_provider', { rootPath })
 }
 
+export function testAiProviders(rootPath: string) {
+  return invoke<ProviderBatchTestResult>('test_ai_providers', { rootPath })
+}
+
 export function loadRecentProjects() {
   return invoke<RecentProject[]>('load_recent_projects')
 }
 
 export function rememberRecentProject(project: RecentProject) {
   return invoke<RecentProject[]>('remember_recent_project', { project })
+}
+
+export function openExternalUrl(url: string) {
+  return invoke<void>('open_external_url', { url })
 }
 
 export function listFrameworkFiles(rootPath: string) {
@@ -230,6 +360,14 @@ export function loadTimelineEvents(rootPath: string) {
 
 export function saveTimelineEvents(rootPath: string, content: string) {
   return invoke<ProjectFileDocument>('save_timeline_events', { rootPath, content })
+}
+
+export function loadTimelineMilestones(rootPath: string) {
+  return invoke<ProjectFileDocument>('load_timeline_milestones', { rootPath })
+}
+
+export function saveTimelineMilestones(rootPath: string, content: string) {
+  return invoke<ProjectFileDocument>('save_timeline_milestones', { rootPath, content })
 }
 
 export function loadTimelineSettings(rootPath: string) {
@@ -262,6 +400,10 @@ export function revealProjectPath(rootPath: string, relativePath: string) {
 
 export function importReferenceFile(rootPath: string, sourcePath: string) {
   return invoke<ProjectFileDocument>('import_reference_file', { rootPath, sourcePath })
+}
+
+export function importReferenceFileWithDeconstruction(rootPath: string, sourcePath: string) {
+  return invoke<DeconstructionImportResult>('import_reference_file_with_deconstruction', { rootPath, sourcePath })
 }
 
 export function importReferenceDirectory(rootPath: string, sourcePath: string) {
@@ -322,6 +464,10 @@ export function extractCharacterCards(rootPath: string) {
 
 export function rescanFacts(rootPath: string) {
   return invoke<ProjectFileDocument>('rescan_facts', { rootPath })
+}
+
+export function regenerateKnowledgeFile(rootPath: string, kind: KnowledgeFileKind, authorInput?: string) {
+  return invoke<ProjectFileDocument>('regenerate_knowledge_file', { rootPath, kind, authorInput })
 }
 
 export function listSelectedSkills(rootPath: string) {

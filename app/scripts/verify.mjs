@@ -4,15 +4,22 @@ import { dirname, resolve } from 'node:path'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const appDir = resolve(scriptDir, '..')
+const repoRoot = resolve(appDir, '..')
 const tauriDir = resolve(appDir, 'src-tauri')
 const smokeUrl = process.env.OLIENTA_SMOKE_URL ?? 'http://localhost:1420'
+const cargoTargetDir = process.env.OLIENTA_CARGO_TARGET_DIR
+  ?? resolve(tauriDir, 'target')
+const configDir = process.env.OLIENTA_CONFIG_DIR
+  ?? resolve(repoRoot, '.olienta-app-config')
 
 const steps = [
   { label: 'copy check', command: 'npm', args: ['run', 'check:copy'], cwd: appDir },
   { label: 'frontend build', command: 'npm', args: ['run', 'build'], cwd: appDir },
   { label: 'frontend lint', command: 'npm', args: ['run', 'lint'], cwd: appDir },
   { label: 'frontend logic smoke', command: 'npm', args: ['run', 'smoke:logic'], cwd: appDir },
+  { label: 'audit flow smoke', command: 'npm', args: ['run', 'smoke:audit-flow'], cwd: appDir },
   { label: 'dev server smoke', command: 'npm', args: ['run', 'smoke:dev'], cwd: appDir, needsDevServer: true },
+  { label: 'browser e2e', command: 'npm', args: ['run', 'e2e'], cwd: appDir },
   { label: 'workflow smoke', command: 'cargo', args: ['test', 'core_writing_workflow_smoke', '--', '--nocapture'], cwd: tauriDir },
   { label: 'rust tests', command: 'cargo', args: ['test'], cwd: tauriDir },
 ]
@@ -30,6 +37,9 @@ function runStep(step) {
     const { command, shell } = commandFor(step)
     const child = spawn(command, step.args, {
       cwd: step.cwd,
+      env: step.command === 'cargo'
+        ? { ...process.env, CARGO_TARGET_DIR: cargoTargetDir, OLIENTA_CONFIG_DIR: configDir }
+        : { ...process.env, OLIENTA_CONFIG_DIR: configDir },
       shell,
       stdio: 'inherit',
     })
@@ -56,6 +66,7 @@ function startDevServer() {
   const { command, shell } = commandFor(step)
   const child = spawn(command, step.args, {
     cwd: step.cwd,
+    env: { ...process.env, OLIENTA_CONFIG_DIR: configDir },
     shell,
     stdio: ['ignore', 'pipe', 'pipe'],
   })

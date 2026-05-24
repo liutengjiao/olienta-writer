@@ -1,11 +1,14 @@
-import { useMemo, useRef, useState } from 'react'
-import type { MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
+import { useEffect, useMemo, useState } from 'react'
+import type { ContractFulfillmentSummary, MarkdownFileSummary, PinnedContextItem, TaskItem } from '../../types'
 import type { WorkspaceProps } from './types'
-import { ChapterList, MarkdownDocument } from './EditorPanels'
-import { buildProviderExportJson } from '../../lib/providerLogic'
-import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../../lib/modelCallLogic'
+import { MarkdownDocument } from './EditorPanels'
+import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders, summarizeModelCallTasks } from '../../lib/modelCallLogic'
+import { isTauriRuntime } from '../../constants'
+import * as tauriApi from '../../api/tauriApi'
 
 export function LocalFilesPanel(props: WorkspaceProps) {
+  const groups = useMemo(() => groupMarkdownFiles(props.markdownFiles), [props.markdownFiles])
+
   return (
     <section className="local-files-layout">
       <div className="local-files-list">
@@ -13,41 +16,121 @@ export function LocalFilesPanel(props: WorkspaceProps) {
           <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>导入文件</button>
           <button type="button" className="ghost-button" onClick={props.onImportReferenceFolder}>导入文件夹</button>
         </div>
-        {groupMarkdownFiles(props.markdownFiles).map(([category, files]) => (
-          <div className="local-file-group" key={category}>
-            <h2>{category}</h2>
+        <p className="local-file-hint">只读浏览当前作品文件夹内的 Markdown、TXT、JSON 和日志文件。</p>
+        <div className="local-file-tree" role="tree" aria-label="项目文件目录">
+          {groups.map(([category, files]) => (
+          <details className="local-file-group" key={category} open>
+            <summary>
+              <span>{category}</span>
+              <small>{files.length}</small>
+            </summary>
             {files.map((file) => (
-              <div className="local-file-row local-file-row-with-action" key={file.relative_path}>
+              <div
+                className={`local-file-row local-file-row-with-action ${props.selectedMarkdownPath === file.relative_path ? 'active' : ''}`}
+                key={file.relative_path}
+                role="treeitem"
+              >
                 <button type="button" className="local-file-open" onClick={() => props.onLoadMarkdownFile(file.relative_path)}>
-                  <strong>{file.relative_path}</strong>
-                  <span>{formatBytes(file.bytes)}</span>
+                  <strong>{formatLocalFileTitle(file)}</strong>
+                  <span>{formatLocalFileSubtitle(file)} · {formatBytes(file.bytes)}</span>
                 </button>
                 <button type="button" className="local-file-locate" onClick={() => props.onRevealProjectPath(file.relative_path)}>
                   定位
                 </button>
               </div>
             ))}
+          </details>
+          ))}
+          {groups.length === 0 && <p className="empty-note">打开项目后，这里会显示项目目录下可预览的文本文件。</p>}
           </div>
-        ))}
       </div>
       <MarkdownDocument
-        title="本地 Markdown"
+        title={props.selectedMarkdownPath ? formatLocalFileTitle({ relative_path: props.selectedMarkdownPath, category: '' }) : '本地 Markdown 阅读器'}
         path={props.selectedMarkdownPath || '选择一个文件'}
         value={props.markdownPreview}
-        onChange={props.onChangeMarkdownPreview}
-        onSave={() => props.selectedMarkdownPath && props.onSaveModuleMarkdownFile(props.selectedMarkdownPath, props.markdownPreview)}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
       />
     </section>
   )
 }
 
+function formatLocalFileTitle(file: Pick<MarkdownFileSummary, 'relative_path' | 'category'>) {
+  const path = file.relative_path
+  const chapter = path.match(/(?:^|\/)(\d{3,4})\.md$/)?.[1]
+  if (path.startsWith('framework/')) return frameworkFileTitle(path)
+  if (path.startsWith('blueprints/chapters/')) return chapter ? `蓝图 · 第 ${Number(chapter)} 章` : '章节蓝图'
+  if (path.startsWith('blueprints/drafts/')) return chapter ? `蓝图草稿 · 第 ${Number(chapter)} 章` : '蓝图草稿'
+  if (path.startsWith('manuscript/chapters/')) return chapter ? `正文 · 第 ${Number(chapter)} 章` : '正文'
+  if (path.startsWith('manuscript/author-input/')) return chapter ? `作者输入 · 第 ${Number(chapter)} 章` : '作者输入'
+  if (path.startsWith('manuscript/candidates/')) return chapter ? `候选稿 · 第 ${Number(chapter)} 章` : '候选稿'
+  if (path.startsWith('tasks/writing-briefs/')) return chapter ? `写作要求 · 第 ${Number(chapter)} 章` : '写作要求'
+  if (path.startsWith('facts/')) return factsFileTitle(path)
+  if (path.startsWith('timeline/')) return path.endsWith('milestones.md') ? '时间线里程碑' : '时间线事件'
+  if (path.startsWith('characters/cards/')) return path.endsWith('INDEX.md') ? '角色卡索引' : path.endsWith('README.md') ? '角色卡说明' : `角色卡 · ${fileNameWithoutExtension(path)}`
+  if (path === 'characters/relations.md') return '关系图谱'
+  if (path === 'characters/growth.md') return '角色成长线'
+  if (path.startsWith('skills/selected/')) return `Skill · ${fileNameWithoutExtension(path)}`
+  if (path.startsWith('logs/model-calls/')) return path.endsWith('history.md') ? '模型调用记录' : '模型调用说明'
+  if (path.startsWith('logs/confirmations/')) return `确认日志 · ${fileNameWithoutExtension(path)}`
+  if (path.startsWith('knowledge/markdown/imported/')) return `导入资料 · ${fileNameWithoutExtension(path)}`
+  if (path.startsWith('exports/')) return `导出文件 · ${fileNameWithoutExtension(path)}`
+  return fileNameWithoutExtension(path) || path
+}
+
+function formatLocalFileSubtitle(file: MarkdownFileSummary) {
+  return file.relative_path
+}
+
+function frameworkFileTitle(path: string) {
+  const labels: Record<string, string> = {
+    '01-setting.md': '故事框架 · 小说结构',
+    '02-premise.md': '故事框架 · 故事梗概',
+    '03-characters.md': '故事框架 · 角色图谱',
+    '04-plot-outline.md': '故事框架 · 情节大纲',
+    '05-world.md': '故事框架 · 世界观',
+    '06-style.md': '故事框架 · 文风配置',
+    '07-scenes.md': '故事框架 · 重要场景',
+  }
+  return labels[path.replace(/^framework\//, '')] ?? `故事框架 · ${fileNameWithoutExtension(path)}`
+}
+
+function factsFileTitle(path: string) {
+  const labels: Record<string, string> = {
+    'facts/confirmed-facts.md': '事实库 · 已确认事实',
+    'facts/open-loops.md': '事实库 · 未闭合伏笔',
+    'facts/forbidden-rules.md': '事实库 · 禁止违背',
+    'facts/author-confirmation.md': '事实库 · 作者确认记录',
+    'facts/character-facts.md': '事实库 · 角色事实',
+    'facts/time-facts.md': '事实库 · 时间事实',
+    'facts/location-facts.md': '事实库 · 地点事实',
+    'facts/relation-facts.md': '事实库 · 关系事实',
+    'facts/event-facts.md': '事实库 · 重要事件',
+    'facts/world-rules.md': '事实库 · 世界规则',
+  }
+  return labels[path] ?? `事实库 · ${fileNameWithoutExtension(path)}`
+}
+
+function fileNameWithoutExtension(path: string) {
+  const name = path.split('/').pop() ?? path
+  return name.replace(/\.(md|markdown|txt|json|jsonl)$/i, '')
+}
+
 export function SkillPanel(props: WorkspaceProps) {
+  const selectedSkillPath = props.selectedSkillName ? `skills/selected/${props.selectedSkillName}` : 'skills/selected'
+
   return (
     <section className="local-files-layout">
       <div className="local-files-list">
-        <button type="button" className="primary-button full-button" onClick={props.onImportSkillFile}>
-          导入 Skill
-        </button>
+        <div className="editor-actions skill-import-actions">
+          <button type="button" className="primary-button" onClick={props.onImportSkillFile}>
+            导入 Skill 文件
+          </button>
+          <button type="button" className="ghost-button" onClick={props.onImportSkillFolder}>
+            导入 Skill 文件夹
+          </button>
+        </div>
         {props.skillWarnings.length > 0 && (
           <ul className="skill-warning-list">
             {props.skillWarnings.map((warning) => <li key={warning}>{warning}</li>)}
@@ -89,10 +172,10 @@ export function SkillPanel(props: WorkspaceProps) {
       </div>
       <MarkdownDocument
         title="已选 Skill"
-        path={props.selectedSkillName || 'skills/selected'}
+        path={selectedSkillPath}
         value={props.skillPreview}
-        onChange={() => undefined}
-        onSave={() => undefined}
+        onChange={props.onChangeSkillPreview}
+        onSave={() => props.selectedSkillName && props.onSaveModuleMarkdownFile(selectedSkillPath, props.skillPreview)}
       />
     </section>
   )
@@ -135,8 +218,47 @@ function formatSkillTag(tag: string) {
 export function TasksPanel(props: WorkspaceProps) {
   const [pinnedContext, setPinnedContext] = useState<PinnedContextItem[]>([])
   const [pinnedStatus, setPinnedStatus] = useState('尚未读取钉选材料')
-  const currentPath = props.activeModuleView === 'tasks-history' ? 'tasks/history.jsonl' : 'tasks/current.json'
+  const [contractFulfillment, setContractFulfillment] = useState('')
+  const [contractFulfillmentStatus, setContractFulfillmentStatus] = useState('保存正文后生成合同履约摘要。')
+  const [contractFulfillmentSummary, setContractFulfillmentSummary] = useState<ContractFulfillmentSummary | null>(null)
   const isHistory = props.activeModuleView === 'tasks-history'
+  const contractFulfillmentPath = `story-contracts/fulfillment/${props.selectedChapterId}.md`
+  const contractFulfillmentJsonPath = `story-contracts/fulfillment/${props.selectedChapterId}.json`
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadContractFulfillment() {
+      if (!props.project) {
+        setContractFulfillment('')
+        setContractFulfillmentSummary(null)
+        setContractFulfillmentStatus('打开项目后显示合同履约摘要。')
+        return
+      }
+      setContractFulfillmentStatus('正在读取合同履约摘要...')
+      try {
+        const loaded = await tauriApi.loadProjectMarkdownFile(props.project.root_path, contractFulfillmentPath)
+        if (cancelled) return
+        setContractFulfillment(loaded.content)
+        setContractFulfillmentStatus(loaded.content.trim() ? '已读取当前章节合同履约摘要。' : '保存正文后生成合同履约摘要。')
+      } catch {
+        if (cancelled) return
+        setContractFulfillment('')
+        setContractFulfillmentStatus('保存正文后生成合同履约摘要。')
+      }
+      try {
+        const loadedJson = await tauriApi.loadProjectMarkdownFile(props.project.root_path, contractFulfillmentJsonPath)
+        if (cancelled) return
+        setContractFulfillmentSummary(JSON.parse(loadedJson.content) as ContractFulfillmentSummary)
+      } catch {
+        if (cancelled) return
+        setContractFulfillmentSummary(null)
+      }
+    }
+    void loadContractFulfillment()
+    return () => {
+      cancelled = true
+    }
+  }, [props.project, contractFulfillmentPath, contractFulfillmentJsonPath])
 
   async function refreshPinnedContext() {
     setPinnedStatus('正在读取钉选材料...')
@@ -151,10 +273,13 @@ export function TasksPanel(props: WorkspaceProps) {
         <TaskStatusStrip tasks={props.tasks} />
         <MarkdownDocument
           title="任务历史"
-          path={props.selectedMarkdownPath || currentPath}
-          value={props.markdownPreview}
-          onChange={props.onChangeMarkdownPreview}
-          onSave={() => props.onSaveModuleMarkdownFile(props.selectedMarkdownPath || currentPath, props.markdownPreview)}
+          path=""
+          value={formatJsonLogForAuthors(props.markdownPreview, 'task')}
+          onChange={() => undefined}
+          onSave={() => undefined}
+          readOnly
+          hideReadOnlyBadge
+          hidePath
         />
       </section>
     )
@@ -163,17 +288,16 @@ export function TasksPanel(props: WorkspaceProps) {
   return (
     <section className="system-events-panel">
       <TaskStatusStrip tasks={props.tasks} />
-      <section className="split-editor-layout">
-        <ChapterList {...props} />
+      <section className="current-task-main">
         <MarkdownDocument
-          title="章节任务书"
+          title={`第 ${Number(props.selectedChapterId)} 章写作要求`}
           path={props.writingBriefPath}
           value={props.writingBrief}
           onChange={props.onChangeWritingBrief}
           onSave={() => props.onSaveModuleMarkdownFile(props.writingBriefPath, props.writingBrief)}
           actions={
             <>
-              <button type="button" className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
+              <button type="button" className="ghost-button" onClick={props.onComposeBrief}>生成本章写作要求</button>
               <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>钉选材料</button>
               <button
                 type="button"
@@ -192,14 +316,35 @@ export function TasksPanel(props: WorkspaceProps) {
           }
         />
       </section>
-      <p className="empty-note">{props.candidateGenerationStatus}</p>
+      {props.candidateGenerationStatus && <p className="task-status-note">{props.candidateGenerationStatus}</p>}
+      <ContractFulfillmentOverview
+        summary={contractFulfillmentSummary}
+        status={contractFulfillmentStatus}
+        jsonPath={contractFulfillmentJsonPath}
+        onRevealProjectPath={props.onRevealProjectPath}
+      />
+      <MarkdownDocument
+        title="合同履约摘要"
+        path=""
+        value={contractFulfillment || `# 第 ${props.selectedChapterId} 章合同履约摘要\n\n${contractFulfillmentStatus}`}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
+        hideReadOnlyBadge
+        hidePath
+        actions={
+          <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(contractFulfillmentPath)}>
+            定位摘要
+          </button>
+        }
+      />
       <section className="pinned-context-panel">
         <div className="panel-heading">
           <h2>钉选材料</h2>
           <span>{pinnedStatus}</span>
         </div>
         {pinnedContext.length === 0 ? (
-          <p className="empty-note">在知识库中检索本地材料，并把选中的结果钉选进本章任务书。</p>
+          <p className="empty-note">在知识库中检索本地材料，并把选中的结果钉选进本章写作要求。</p>
         ) : (
           <div className="pinned-context-list">
             {pinnedContext.map((item) => (
@@ -229,15 +374,130 @@ export function TasksPanel(props: WorkspaceProps) {
   )
 }
 
-export function LogsPanel(props: WorkspaceProps) {
-  const files = props.markdownFiles.filter((file) =>
-    file.relative_path.startsWith('logs/') ||
-    file.relative_path === 'facts/author-confirmation.md' ||
-    file.relative_path.startsWith('.olienta-events/'),
+function ContractFulfillmentOverview(props: {
+  summary: ContractFulfillmentSummary | null
+  status: string
+  jsonPath: string
+  onRevealProjectPath: (relativePath: string) => void
+}) {
+  const summary = props.summary
+  if (!summary) {
+    return (
+      <section className="contract-fulfillment-overview empty">
+        <div className="panel-heading">
+          <h2>合同履约总览</h2>
+          <span>{props.status}</span>
+        </div>
+        <p className="empty-note">保存正文后会生成结构化履约数据，用于显示完成率、缺失必须项和禁写触碰。</p>
+      </section>
+    )
+  }
+
+  const hasRisk = summary.missingRequiredCount > 0 || summary.touchedForbiddenCount > 0
+  return (
+    <section className={`contract-fulfillment-overview ${hasRisk ? 'risk' : 'clear'}`}>
+      <div className="panel-heading">
+        <div>
+          <h2>合同履约总览</h2>
+          <p>用于检查当前章节是否满足本章写作要求、事实约束和禁写规则。</p>
+        </div>
+        <div className="contract-fulfillment-actions">
+          <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(summary.revisionPath)}>
+            定位回修清单
+          </button>
+        </div>
+      </div>
+      <div className="contract-fulfillment-metrics">
+        <article>
+          <span>履约得分</span>
+          <strong>{summary.score}</strong>
+        </article>
+        <article>
+          <span>必须项</span>
+          <strong>{summary.fulfilledRequiredCount}/{summary.requiredTotal}</strong>
+        </article>
+        <article className={summary.missingRequiredCount > 0 ? 'danger' : ''}>
+          <span>缺失必须项</span>
+          <strong>{summary.missingRequiredCount}</strong>
+        </article>
+        <article className={summary.touchedForbiddenCount > 0 ? 'danger' : ''}>
+          <span>触碰禁写项</span>
+          <strong>{summary.touchedForbiddenCount}</strong>
+        </article>
+        <article>
+          <span>引用事实</span>
+          <strong>{summary.referencedFactCount}</strong>
+        </article>
+      </div>
+      <div className="contract-fulfillment-risks">
+        <ContractFulfillmentList
+          title="缺失必须项"
+          items={summary.missingRequired}
+          emptyText="暂无缺失必须项。"
+          sourcePath={summary.contractPath}
+          manuscriptPath={summary.manuscriptPath}
+          onRevealProjectPath={props.onRevealProjectPath}
+        />
+        <ContractFulfillmentList
+          title="触碰禁写项"
+          items={summary.touchedForbidden}
+          emptyText="暂无触碰禁写项。"
+          sourcePath={summary.contractPath}
+          manuscriptPath={summary.manuscriptPath}
+          onRevealProjectPath={props.onRevealProjectPath}
+        />
+      </div>
+    </section>
   )
+}
+
+function ContractFulfillmentList(props: {
+  title: string
+  items: string[]
+  emptyText: string
+  sourcePath: string
+  manuscriptPath: string
+  onRevealProjectPath: (relativePath: string) => void
+}) {
+  return (
+    <article>
+      <strong>{props.title}</strong>
+      {props.items.length === 0 ? (
+        <p>{props.emptyText}</p>
+      ) : (
+        <ul>
+          {props.items.slice(0, 4).map((item) => (
+            <li className="contract-fulfillment-risk-item" key={item}>
+              <span>{item}</span>
+              <span className="contract-fulfillment-risk-actions">
+                <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(props.sourcePath)}>
+                  定位合同
+                </button>
+                <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(props.manuscriptPath)}>
+                  定位正文
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {props.items.length > 4 && <small>还有 {props.items.length - 4} 项，请查看完整摘要。</small>}
+    </article>
+  )
+}
+
+export function LogsPanel(props: WorkspaceProps) {
+  const isSystem = props.activeModuleView === 'logs-system-events'
+  const files = props.markdownFiles.filter((file) => isSystem
+    ? file.relative_path.startsWith('.olienta-events/') || file.relative_path === 'logs/system-events.jsonl'
+    : file.relative_path === 'facts/author-confirmation.md')
+  if (props.activeModuleView === 'logs-confirmations') {
+    return <CandidateConfirmationAuditPanel {...props} />
+  }
+
   return (
     <DocumentHubPanel
-      title={props.activeModuleView === 'logs-system-events' ? '系统事件' : '作者确认日志'}
+      title={isSystem ? '系统事件' : '作者确认日志'}
       files={files}
       selectedPath={props.selectedMarkdownPath}
       content={props.markdownPreview}
@@ -249,6 +509,328 @@ export function LogsPanel(props: WorkspaceProps) {
   )
 }
 
+type CandidateConfirmationIndex = {
+  chapter_id: string
+  latest_confirmation_path: string
+  entries: CandidateConfirmationIndexEntry[]
+}
+
+type CandidateConfirmationIndexEntry = {
+  entry_id?: string
+  created_at_ms: number
+  adoption_status: string
+  adoption_mode: string
+  candidate_path: string
+  current_candidate_manifest_path?: string
+  candidate_history_manifest_path?: string
+  manuscript_path: string
+  confirmation_path: string
+  latest_confirmation_path: string
+}
+
+type CandidateConfirmationIndexRecord = CandidateConfirmationIndexEntry & {
+  chapterId: string
+  path: string
+  fromIndex: boolean
+  bytes?: number
+}
+
+function CandidateConfirmationAuditPanel(props: WorkspaceProps) {
+  const [chapterFilter, setChapterFilter] = useState('all')
+  const [recordTypeFilter, setRecordTypeFilter] = useState('all')
+  const [adoptionModeFilter, setAdoptionModeFilter] = useState('all')
+  const [historyBindingFilter, setHistoryBindingFilter] = useState('all')
+  const [confirmationQuery, setConfirmationQuery] = useState('')
+  const [confirmationModeByPath, setConfirmationModeByPath] = useState<Record<string, string>>({})
+  const [confirmationIndexByChapter, setConfirmationIndexByChapter] = useState<Record<string, CandidateConfirmationIndex>>({})
+  const [includeLatestConfirmations, setIncludeLatestConfirmations] = useState(false)
+  const confirmationIndexFiles = useMemo(
+    () => props.markdownFiles
+      .filter((file) => file.relative_path.startsWith('logs/confirmations/') && file.relative_path.endsWith('/index.json'))
+      .sort((left, right) => left.relative_path.localeCompare(right.relative_path)),
+    [props.markdownFiles],
+  )
+  const confirmationFiles = useMemo(
+    () => props.markdownFiles
+      .filter((file) => file.relative_path.startsWith('logs/confirmations/') && file.relative_path.endsWith('.md'))
+      .sort((left, right) => right.relative_path.localeCompare(left.relative_path)),
+    [props.markdownFiles],
+  )
+  const indexedConfirmationPaths = useMemo(
+    () => new Set(Object.values(confirmationIndexByChapter).flatMap((index) => index.entries.map((entry) => entry.confirmation_path))),
+    [confirmationIndexByChapter],
+  )
+  const confirmationRecords = useMemo(() => {
+    const indexedRecords: CandidateConfirmationIndexRecord[] = Object.values(confirmationIndexByChapter)
+      .flatMap((index) => index.entries.map((entry) => ({
+        ...entry,
+        chapterId: index.chapter_id,
+        path: entry.confirmation_path,
+        fromIndex: true,
+      })))
+    const fallbackRecords: CandidateConfirmationIndexRecord[] = confirmationFiles
+      .filter((file) => includeLatestConfirmations || !isLatestConfirmationPath(file.relative_path))
+      .filter((file) => !indexedConfirmationPaths.has(file.relative_path))
+      .map((file) => ({
+        created_at_ms: confirmationTimestampFromPath(file.relative_path),
+        entry_id: undefined,
+        adoption_status: confirmationRecordType(file.relative_path) === 'undo' ? 'undone' : 'adopted',
+        adoption_mode: confirmationModeByPath[file.relative_path] || '',
+        candidate_path: '',
+        current_candidate_manifest_path: undefined,
+        candidate_history_manifest_path: undefined,
+        manuscript_path: '',
+        confirmation_path: file.relative_path,
+        latest_confirmation_path: latestConfirmationPathFor(file.relative_path),
+        chapterId: confirmationChapterId(file.relative_path),
+        path: file.relative_path,
+        fromIndex: false,
+        bytes: file.bytes,
+      }))
+    return [...indexedRecords, ...fallbackRecords]
+      .filter((record) => includeLatestConfirmations || !isLatestConfirmationPath(record.path))
+      .sort((left, right) => {
+        const byTime = right.created_at_ms - left.created_at_ms
+        return byTime || right.path.localeCompare(left.path)
+      })
+  }, [confirmationFiles, confirmationIndexByChapter, confirmationModeByPath, includeLatestConfirmations, indexedConfirmationPaths])
+  const chapterOptions = useMemo(
+    () => Array.from(new Set(confirmationRecords.map((record) => record.chapterId))).sort(),
+    [confirmationRecords],
+  )
+  const adoptionModeOptions = useMemo(
+    () => Array.from(new Set(confirmationRecords.map((record) => record.adoption_mode).filter(Boolean))).sort(),
+    [confirmationRecords],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadConfirmationModes() {
+      if (!props.project || !isTauriRuntime || confirmationFiles.length === 0) {
+        setConfirmationModeByPath({})
+        return
+      }
+
+      const entries = await Promise.all(
+        confirmationFiles.map(async (file) => {
+          try {
+            const loaded = await tauriApi.loadProjectMarkdownFile(props.project!.root_path, file.relative_path)
+            return [file.relative_path, parseConfirmationAdoptionMode(loaded.content)] as const
+          } catch {
+            return [file.relative_path, ''] as const
+          }
+        }),
+      )
+
+      if (!cancelled) {
+        setConfirmationModeByPath(Object.fromEntries(entries))
+      }
+    }
+
+    void loadConfirmationModes()
+    return () => {
+      cancelled = true
+    }
+  }, [confirmationFiles, props.project])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadConfirmationIndexes() {
+      if (!props.project || !isTauriRuntime || confirmationIndexFiles.length === 0) {
+        setConfirmationIndexByChapter({})
+        return
+      }
+
+      const entries = await Promise.all(
+        confirmationIndexFiles.map(async (file) => {
+          try {
+            const loaded = await tauriApi.loadProjectMarkdownFile(props.project!.root_path, file.relative_path)
+            const parsed = JSON.parse(loaded.content) as CandidateConfirmationIndex
+            return [parsed.chapter_id || confirmationChapterId(file.relative_path), parsed] as const
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (!cancelled) {
+        setConfirmationIndexByChapter(Object.fromEntries(entries.filter((entry): entry is readonly [string, CandidateConfirmationIndex] => Boolean(entry))))
+      }
+    }
+
+    void loadConfirmationIndexes()
+    return () => {
+      cancelled = true
+    }
+  }, [confirmationIndexFiles, props.project])
+
+  const filteredConfirmationRecords = confirmationRecords.filter((record) => {
+    const matchesChapter = chapterFilter === 'all' || record.chapterId === chapterFilter
+    const matchesRecordType = recordTypeFilter === 'all' || confirmationRecordType(record.path) === recordTypeFilter
+    const matchesAdoptionMode = adoptionModeFilter === 'all' || record.adoption_mode === adoptionModeFilter
+    const matchesHistoryBinding =
+      historyBindingFilter === 'all'
+      || (historyBindingFilter === 'bound' && Boolean(record.candidate_history_manifest_path))
+      || (historyBindingFilter === 'unbound' && !record.candidate_history_manifest_path)
+    const searchable = [record.path, record.entry_id, record.candidate_path, record.current_candidate_manifest_path, record.candidate_history_manifest_path, record.manuscript_path, record.adoption_mode].join(' ').toLowerCase()
+    const matchesQuery = !confirmationQuery.trim() || searchable.includes(confirmationQuery.trim().toLowerCase())
+    return matchesChapter && matchesRecordType && matchesAdoptionMode && matchesHistoryBinding && matchesQuery
+  })
+  const adoptionCount = confirmationRecords.filter((record) => !isUndoConfirmationPath(record.path)).length
+  const undoCount = confirmationRecords.length - adoptionCount
+  const selectedPath = props.selectedMarkdownPath.startsWith('logs/confirmations/')
+    ? props.selectedMarkdownPath
+    : filteredConfirmationRecords[0]?.path ?? confirmationRecords[0]?.path ?? ''
+  const selectedContent = props.selectedMarkdownPath === selectedPath ? props.markdownPreview : ''
+  const activeHighlightedConfirmationPath = props.highlightedConfirmationPath
+  const activeHighlightedConfirmationEntryId = props.highlightedConfirmationEntryId
+  const activeHighlightedConfirmationLabel = activeHighlightedConfirmationEntryId || activeHighlightedConfirmationPath
+
+  return (
+    <section className="confirmation-audit-layout">
+      <aside className="confirmation-audit-list">
+        <div className="confirmation-audit-summary">
+          <article>
+            <span>确认摘要</span>
+            <strong>{confirmationRecords.length}</strong>
+          </article>
+          <article>
+            <span>采用</span>
+            <strong>{adoptionCount}</strong>
+          </article>
+          <article>
+            <span>撤销</span>
+            <strong>{undoCount}</strong>
+          </article>
+        </div>
+        <div className="confirmation-audit-filters">
+          <label>
+            <span>章节</span>
+            <select value={chapterFilter} onChange={(event) => setChapterFilter(event.target.value)}>
+              <option value="all">全部章节</option>
+              {chapterOptions.map((chapterId) => (
+                <option value={chapterId} key={chapterId}>第 {chapterId} 章</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>类型</span>
+            <select value={recordTypeFilter} onChange={(event) => setRecordTypeFilter(event.target.value)}>
+              <option value="all">全部类型</option>
+              <option value="adopted">采用</option>
+              <option value="undo">撤销</option>
+            </select>
+          </label>
+          <label>
+            <span>采用方式</span>
+            <select value={adoptionModeFilter} onChange={(event) => setAdoptionModeFilter(event.target.value)}>
+              <option value="all">全部方式</option>
+              {adoptionModeOptions.map((mode) => (
+                <option value={mode} key={mode}>{formatAdoptionMode(mode)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>历史归档</span>
+            <select value={historyBindingFilter} onChange={(event) => setHistoryBindingFilter(event.target.value)}>
+              <option value="all">全部归档状态</option>
+              <option value="bound">已绑定历史版本</option>
+              <option value="unbound">尚未归档历史版本</option>
+            </select>
+          </label>
+          <label className="wide">
+            <span>路径关键词</span>
+            <input
+              value={confirmationQuery}
+              onChange={(event) => setConfirmationQuery(event.target.value)}
+              placeholder="章节或摘要路径"
+            />
+          </label>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              setChapterFilter('all')
+              setRecordTypeFilter('all')
+              setAdoptionModeFilter('all')
+              setHistoryBindingFilter('all')
+              setConfirmationQuery('')
+            }}
+          >
+            清除筛选
+          </button>
+          <label className="checkbox-option">
+            <input
+              type="checkbox"
+              checked={includeLatestConfirmations}
+              onChange={(event) => setIncludeLatestConfirmations(event.target.checked)}
+            />
+            <span>显示 latest 兼容文件</span>
+          </label>
+          <small>当前显示 {filteredConfirmationRecords.length} / {confirmationRecords.length} 条</small>
+          {activeHighlightedConfirmationLabel && (
+            <button type="button" className="ghost-button" onClick={props.onClearConfirmationHighlight}>
+              清除确认高亮
+            </button>
+          )}
+        </div>
+        {activeHighlightedConfirmationLabel && (
+          <p className="model-call-refresh-note">已高亮采用确认：{activeHighlightedConfirmationLabel}</p>
+        )}
+        {confirmationRecords.length === 0 && <p className="empty-note">暂时没有候选稿采用确认摘要。</p>}
+        {confirmationRecords.length > 0 && filteredConfirmationRecords.length === 0 && (
+          <p className="empty-note">没有匹配当前筛选条件的确认摘要。</p>
+        )}
+        {filteredConfirmationRecords.map((record) => {
+          const undo = isUndoConfirmationPath(record.path)
+          const highlighted = activeHighlightedConfirmationEntryId
+            ? record.entry_id === activeHighlightedConfirmationEntryId
+            : activeHighlightedConfirmationPath === record.path
+          return (
+            <article className={`confirmation-audit-card ${undo ? 'undo' : 'adopted'} ${selectedPath === record.path ? 'active' : ''} ${highlighted ? 'highlighted' : ''}`} key={record.path}>
+              <button type="button" onClick={() => props.onLoadMarkdownFile(record.path)}>
+                <span>{undo ? '撤销' : '采用'}</span>
+                <strong>{formatConfirmationTitle(record.path)}</strong>
+                {record.adoption_mode && (
+                  <em>{formatAdoptionMode(record.adoption_mode)}</em>
+                )}
+                {record.fromIndex && <em>index</em>}
+                {record.entry_id && <em>{record.entry_id}</em>}
+                <small>{record.path}</small>
+              </button>
+              <button type="button" className="local-file-locate" onClick={() => props.onRevealProjectPath(record.path)}>
+                定位
+              </button>
+              {record.current_candidate_manifest_path && (
+                <button type="button" className="local-file-locate" onClick={() => props.onLoadMarkdownFile(record.current_candidate_manifest_path!)}>
+                  定位候选稿 manifest
+                </button>
+              )}
+              {record.candidate_history_manifest_path && (
+                <button type="button" className="local-file-locate" onClick={() => props.onOpenCandidateHistoryVersion(record.candidate_history_manifest_path!, record.confirmation_path, record.entry_id)}>
+                  定位候选稿历史版本
+                </button>
+              )}
+            </article>
+          )
+        })}
+      </aside>
+      <MarkdownDocument
+        title="采用确认摘要"
+        path=""
+        value={selectedContent}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
+        hideReadOnlyBadge
+        hidePath
+      />
+    </section>
+  )
+}
+
 export function ModelCallsPanel(props: WorkspaceProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [taskFilter, setTaskFilter] = useState('all')
@@ -256,7 +838,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const [failureKindFilter, setFailureKindFilter] = useState('all')
   const [query, setQuery] = useState('')
   const [providerTesting, setProviderTesting] = useState(false)
+  const [providerBatchTesting, setProviderBatchTesting] = useState(false)
   const [testRefreshNote, setTestRefreshNote] = useState('')
+  const [highlightedModelCallId, setHighlightedModelCallId] = useState('')
   const defaultPath = 'logs/model-calls/history.md'
   const entries = useMemo(() => parseModelCallHistory(props.markdownPreview), [props.markdownPreview])
   const summary = useMemo(() => summarizeModelCallHistory(props.markdownPreview), [props.markdownPreview])
@@ -265,12 +849,15 @@ export function ModelCallsPanel(props: WorkspaceProps) {
   const costSummary = useMemo(() => summarizeModelCallCosts(entries, pricingProviders), [entries, pricingProviders])
   const failureSummary = useMemo(() => summarizeModelCallFailures(entries), [entries])
   const providerSummaries = useMemo(() => summarizeModelCallProviders(entries, pricingProviders), [entries, pricingProviders])
+  const taskSummaries = useMemo(() => summarizeModelCallTasks(entries, pricingProviders), [entries, pricingProviders])
   const taskOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.task))).sort(), [entries])
   const providerOptions = useMemo(() => Array.from(new Set(entries.map((entry) => entry.provider))).sort(), [entries])
   const failureKindOptions = useMemo(() => failureSummary.reasonGroups.map((group) => group.kind), [failureSummary])
+  const activeHighlightedModelCallId = props.highlightedModelCallId || highlightedModelCallId
+  const activeQuery = props.highlightedModelCallId || query
   const filteredEntries = useMemo(
-    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, provider: providerFilter, failureKind: failureKindFilter, query }).slice().reverse(),
-    [entries, failureKindFilter, providerFilter, query, statusFilter, taskFilter],
+    () => filterModelCallEntries(entries, { status: statusFilter, task: taskFilter, provider: providerFilter, failureKind: failureKindFilter, query: activeQuery }).slice().reverse(),
+    [activeQuery, entries, failureKindFilter, providerFilter, statusFilter, taskFilter],
   )
 
   function clearModelCallFilters() {
@@ -279,6 +866,8 @@ export function ModelCallsPanel(props: WorkspaceProps) {
     setProviderFilter('all')
     setFailureKindFilter('all')
     setQuery('')
+    setHighlightedModelCallId('')
+    props.onClearModelCallHighlight()
   }
 
   async function runProviderTestAndRefresh() {
@@ -290,6 +879,7 @@ export function ModelCallsPanel(props: WorkspaceProps) {
       const result = await props.onTestAiProvider()
       props.onLoadMarkdownFile(defaultPath)
       clearModelCallFilters()
+      setHighlightedModelCallId(result?.logEntryId ?? '')
       if (result?.ok === false) {
         setStatusFilter('failed')
         if (result.provider) setProviderFilter(result.provider)
@@ -299,6 +889,28 @@ export function ModelCallsPanel(props: WorkspaceProps) {
         : '测试完成，已刷新模型调用历史；列表顶部显示最新记录。')
     } finally {
       setProviderTesting(false)
+    }
+  }
+
+  async function runProviderBatchTestAndRefresh() {
+    if (providerBatchTesting) return
+
+    setProviderBatchTesting(true)
+    setTestRefreshNote('正在批量测试所有启用 Provider...')
+    try {
+      const result = await props.onTestAiProviders()
+      props.onLoadMarkdownFile(defaultPath)
+      clearModelCallFilters()
+      setTaskFilter('provider-test')
+      if (result?.failed && result.failed > 0) {
+        setStatusFilter('failed')
+      }
+      setHighlightedModelCallId(result?.results.at(-1)?.logEntryId ?? '')
+      setTestRefreshNote(result
+        ? `批量测试完成：${result.passed}/${result.total} 可用，${result.failed} 失败。`
+        : '批量测试没有返回结果，请检查 Provider 配置。')
+    } finally {
+      setProviderBatchTesting(false)
     }
   }
 
@@ -332,10 +944,14 @@ export function ModelCallsPanel(props: WorkspaceProps) {
           <button type="button" className="ghost-button" onClick={() => void runProviderTestAndRefresh()} disabled={providerTesting}>
             {providerTesting ? '测试中' : '运行测试'}
           </button>
+          <button type="button" className="ghost-button" onClick={() => void runProviderBatchTestAndRefresh()} disabled={providerBatchTesting}>
+            {providerBatchTesting ? '批量测试中' : '批量测试'}
+          </button>
           <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(defaultPath)}>打开历史</button>
           <button type="button" className="ghost-button" onClick={clearModelCallFilters}>最新记录</button>
         </div>
         {testRefreshNote && <p className="model-call-refresh-note">{testRefreshNote}</p>}
+        {activeHighlightedModelCallId && <p className="model-call-refresh-note">已高亮模型调用记录：{activeHighlightedModelCallId}</p>}
       </div>
       <div className="health-strip">
         <article><span>调用次数</span><strong>{summary.callCount}</strong></article>
@@ -351,6 +967,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
             <span>{failureSummary.totalFailed} 条失败调用</span>
             <button type="button" className="ghost-button" onClick={() => void runProviderTestAndRefresh()} disabled={providerTesting}>
               {providerTesting ? '测试中' : '运行测试'}
+            </button>
+            <button type="button" className="ghost-button" onClick={() => void runProviderBatchTestAndRefresh()} disabled={providerBatchTesting}>
+              {providerBatchTesting ? '批量测试中' : '批量测试'}
             </button>
             <button type="button" className="ghost-button" onClick={props.onOpenModelProviders}>Provider 配置</button>
           </div>
@@ -398,6 +1017,34 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                 </article>
               ))}
             </div>
+          </div>
+        )}
+      </section>
+      <section className="model-task-trends">
+        <div className="panel-heading">
+          <h2>用途趋势</h2>
+          <span>{taskSummaries.length} 类调用</span>
+        </div>
+        {taskSummaries.length === 0 ? (
+          <p className="empty-note">还没有可汇总的用途调用记录。</p>
+        ) : (
+          <div className="model-task-grid">
+            {taskSummaries.map((task) => (
+              <button type="button" className={`model-task-card ${taskFilter === task.task ? 'active' : ''}`} key={task.task} onClick={() => setTaskFilter(task.task)}>
+                <div>
+                  <strong>{task.task}</strong>
+                  <span>{task.primaryProvider}</span>
+                </div>
+                <dl>
+                  <div><dt>调用</dt><dd>{task.callCount}</dd></div>
+                  <div><dt>失败率</dt><dd className={task.failedCount > 0 ? 'danger-text' : ''}>{task.failureRate}%</dd></div>
+                  <div><dt>平均耗时</dt><dd>{task.averageDurationMs} ms</dd></div>
+                  <div><dt>Token</dt><dd>{task.totalTokens}</dd></div>
+                  <div><dt>费用</dt><dd>{formatUsd(task.estimatedCostUsd)}</dd></div>
+                </dl>
+                <p>{formatModelCallStatus(task.latestStatus)}：{task.latestMessage}</p>
+              </button>
+            ))}
           </div>
         )}
       </section>
@@ -489,8 +1136,9 @@ export function ModelCallsPanel(props: WorkspaceProps) {
             filteredEntries.slice(0, 12).map((entry) => {
               const estimatedCost = estimateModelCallCost(entry, pricingProviders)
               const failure = classifyModelCallFailure(entry)
+              const highlighted = activeHighlightedModelCallId === entry.logEntryId
               return (
-              <article className={`model-call-row ${entry.status}`} key={entry.id}>
+              <article className={`model-call-row ${entry.status} ${highlighted ? 'highlighted' : ''}`} key={entry.id}>
                 <div className="model-call-row-head">
                   <div>
                     <strong>{entry.task}</strong>
@@ -503,11 +1151,20 @@ export function ModelCallsPanel(props: WorkspaceProps) {
                 <dl>
                   <div><dt>章节</dt><dd>{entry.chapter}</dd></div>
                   <div><dt>耗时</dt><dd>{entry.durationMs === null ? '-' : `${entry.durationMs} ms`}</dd></div>
+                  <div><dt>重试</dt><dd>{entry.retryAttempts > 0 ? `${entry.retryAttempts} 次` : '-'}</dd></div>
+                  <div><dt>重试原因</dt><dd>{entry.retryReason}</dd></div>
+                  <div><dt>尝试耗时</dt><dd>{entry.attemptDurationsMs}</dd></div>
                   <div><dt>Token</dt><dd>{entry.totalTokens ?? '-'}</dd></div>
                   <div><dt>费用</dt><dd>{estimatedCost === null ? '-' : formatUsd(estimatedCost)}</dd></div>
                   <div><dt>错误</dt><dd>{entry.status === 'failed' ? failure.label : '-'}</dd></div>
                   <div><dt>输出</dt><dd>{entry.output}</dd></div>
                 </dl>
+                {entry.promptSummary !== '-' && (
+                  <p className="model-call-prompt-summary">
+                    <span>Prompt 摘要</span>
+                    {entry.promptSummary}
+                  </p>
+                )}
                 <p>{entry.message}</p>
                 {entry.status === 'failed' && (
                   <div className="model-call-advice">
@@ -600,7 +1257,16 @@ function DocumentHubPanel(props: {
   onSave: (relativePath: string, content: string) => void
   onReveal: (relativePath: string) => void
 }) {
-  const path = props.selectedPath || props.files[0]?.relative_path || '选择一个文件'
+  const selectedFile = props.files.find((file) => file.relative_path === props.selectedPath) ?? props.files[0]
+  const path = selectedFile?.relative_path || ''
+  const readableContent = formatDocumentHubContent(path, props.content)
+
+  useEffect(() => {
+    if (selectedFile && props.selectedPath !== selectedFile.relative_path) {
+      props.onLoad(selectedFile.relative_path)
+    }
+  }, [props, selectedFile])
+
   return (
     <section className="module-document-layout">
       <div className="module-document-list">
@@ -608,8 +1274,8 @@ function DocumentHubPanel(props: {
         {props.files.map((file) => (
           <div className="local-file-row local-file-row-with-action" key={file.relative_path}>
             <button type="button" className="local-file-open" onClick={() => props.onLoad(file.relative_path)}>
-              <strong>{file.relative_path}</strong>
-              <span>{file.category} · {formatBytes(file.bytes)}</span>
+              <strong>{formatLogFileTitle(file.relative_path)}</strong>
+              <span>{formatLogFileSubtitle(file.relative_path, file.bytes)}</span>
             </button>
             <button type="button" className="local-file-locate" onClick={() => props.onReveal(file.relative_path)}>
               定位
@@ -619,28 +1285,144 @@ function DocumentHubPanel(props: {
       </div>
       <MarkdownDocument
         title={props.title}
-        path={path}
-        value={props.content}
-        onChange={props.onChange}
-        onSave={() => props.selectedPath && props.onSave(props.selectedPath, props.content)}
+        path=""
+        value={readableContent}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
+        hideReadOnlyBadge
+        hidePath
       />
     </section>
   )
 }
 
+function formatDocumentHubContent(path: string, content: string) {
+  if (!content.trim()) return '暂无内容。'
+  if (path.endsWith('.jsonl')) return formatJsonLogForAuthors(content, 'system')
+  if (path.endsWith('.json')) return formatSingleJsonForAuthors(path, content)
+  return content
+}
+
+function formatJsonLogForAuthors(content: string, kind: 'task' | 'system') {
+  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) return '暂无记录。'
+
+  const entries = lines.slice(-80).map((line, index) => {
+    try {
+      return formatLogObject(JSON.parse(line), kind, index + 1)
+    } catch {
+      return `- ${line}`
+    }
+  })
+  return `# ${kind === 'task' ? '任务历史' : '系统事件'}\n\n${entries.join('\n')}`
+}
+
+function formatSingleJsonForAuthors(path: string, content: string) {
+  try {
+    const parsed = JSON.parse(content)
+    return `# ${formatLogFileTitle(path)}\n\n${formatLogObject(parsed, 'system', 1)}`
+  } catch {
+    return content
+  }
+}
+
+function formatLogObject(entry: Record<string, unknown>, kind: 'task' | 'system', index: number) {
+  const time = formatLogTime(entry.createdAtUnix) || formatLogTime(entry.created_at_unix) || formatLogTime(entry.created_at_ms, true) || `记录 ${index}`
+  const status = typeof entry.status === 'string' ? formatTaskStatusLabel(entry.status) : ''
+  const eventKind = typeof entry.kind === 'string' ? formatEventKind(entry.kind) : kind === 'task' ? '任务记录' : '系统记录'
+  const detail = typeof entry.detail === 'object' && entry.detail !== null ? entry.detail as Record<string, unknown> : {}
+  const chapter = typeof entry.chapterId === 'string' ? entry.chapterId : typeof detail.chapterId === 'string' ? detail.chapterId : ''
+  const message = typeof detail.message === 'string'
+    ? detail.message
+    : typeof entry.message === 'string'
+      ? entry.message
+      : summarizeLogDetail(detail)
+  const chapterText = chapter ? ` · 第 ${Number(chapter)} 章` : ''
+  const statusText = status ? ` · ${status}` : ''
+  return `- **${time}** · ${eventKind}${chapterText}${statusText}${message ? `：${message}` : ''}`
+}
+
+function summarizeLogDetail(detail: Record<string, unknown>) {
+  const path = typeof detail.path === 'string' ? detail.path : typeof detail.configPath === 'string' ? detail.configPath : ''
+  const count = typeof detail.count === 'number' ? detail.count : undefined
+  const enabledCount = typeof detail.enabledCount === 'number' ? detail.enabledCount : undefined
+  if (typeof detail.format === 'string') return `导出 ${detail.format}${path ? ` 到 ${formatFriendlyPath(path)}` : ''}`
+  if (enabledCount !== undefined && count !== undefined) return `保存 ${enabledCount}/${count} 个可用配置`
+  if (path) return formatFriendlyPath(path)
+  return ''
+}
+
+function formatLogFileTitle(path: string) {
+  if (path === 'facts/author-confirmation.md') return '作者确认记录'
+  if (path === 'logs/system-events.jsonl') return '系统事件汇总'
+  const commit = path.match(/\.olienta-events\/commits\/(\d+)-(\d+)\.json$/)
+  if (commit) return `第 ${Number(commit[2])} 章保存记录`
+  return fileNameWithoutExtension(path)
+}
+
+function formatLogFileSubtitle(path: string, bytes: number) {
+  const commit = path.match(/\.olienta-events\/commits\/(\d+)-(\d+)\.json$/)
+  if (commit) return `${formatLogTime(Number(commit[1]))} · ${formatBytes(bytes)}`
+  return `${formatFriendlyPath(path)} · ${formatBytes(bytes)}`
+}
+
+function formatFriendlyPath(path: string) {
+  if (path.includes('ai-providers')) return 'AI 设置'
+  if (path.startsWith('manuscript/chapters/')) return `正文第 ${Number(fileNameWithoutExtension(path))} 章`
+  if (path.startsWith('blueprints/chapters/')) return `蓝图第 ${Number(fileNameWithoutExtension(path))} 章`
+  if (path.startsWith('tasks/writing-briefs/')) return `第 ${Number(fileNameWithoutExtension(path))} 章写作要求`
+  if (path.startsWith('story-contracts/fulfillment/')) return `第 ${Number(fileNameWithoutExtension(path))} 章履约摘要`
+  return path
+}
+
+function formatLogTime(value: unknown, milliseconds = false) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return ''
+  const date = new Date(milliseconds ? value : value * 1000)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatEventKind(kind: string) {
+  const labels: Record<string, string> = {
+    chapter_saved: '正文保存',
+    candidate_generated: '候选稿生成',
+    candidate_adopted: '候选稿采用',
+    candidate_undo: '撤销采用',
+    blueprint_saved: '蓝图保存',
+    brief_composed: '写作要求生成',
+    providers_saved: 'AI 设置保存',
+    provider_tested: 'Provider 测试',
+    export_created: '导出完成',
+  }
+  return labels[kind] || kind.replace(/_/g, ' ')
+}
+
+function formatTaskStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    done: '完成',
+    working: '进行中',
+    ready: '待处理',
+    error: '失败',
+    failed: '失败',
+    ok: '成功',
+  }
+  return labels[status] || status
+}
+
 function ProviderPanel(props: WorkspaceProps) {
-  const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
   const parsed = parseProviders(props.aiProvidersJson)
   const providers = parsed.ok ? parsed.providers : []
-  const coverage = PROVIDER_USE_CASES.map((useCase) => ({
-    ...useCase,
-    provider: providers.find((provider) =>
-      provider.enabled !== false &&
-      (provider.useCases.length === 0 || provider.useCases.includes(useCase.key)),
-    ),
-  }))
+  const ui = providerPanelCopy(props.locale)
 
   function updateProviders(nextProviders: AiProviderDraft[]) {
+    setSaveState('idle')
     props.onChangeAiProvidersJson(`${JSON.stringify(nextProviders, null, 2)}\n`)
   }
 
@@ -659,32 +1441,25 @@ function ProviderPanel(props: WorkspaceProps) {
     updateProviders(next)
   }
 
-  function toggleUseCase(index: number, useCase: string) {
-    const provider = providers[index]
-    const current = new Set(provider.useCases)
-    if (current.has(useCase)) current.delete(useCase)
-    else current.add(useCase)
-    updateProvider(index, { useCases: Array.from(current) })
-  }
-
   function addProvider() {
     updateProviders([
       ...providers,
       {
         id: `provider-${providers.length + 1}`,
-        name: '新 Provider',
+        name: ui.newProviderName,
         kind: 'openai-compatible',
         enabled: true,
         baseUrl: 'https://api.openai.com/v1',
         apiKey: '',
         model: '',
+        models: [''],
         contextWindow: 128000,
         temperature: 0.7,
         maxTokens: 4096,
-        timeoutSeconds: 90,
+        timeoutSeconds: 180,
         inputPricePerMillionTokens: 0,
         outputPricePerMillionTokens: 0,
-        useCases: ['chapter'],
+        useCases: [],
       },
     ])
   }
@@ -693,7 +1468,7 @@ function ProviderPanel(props: WorkspaceProps) {
     const provider = providers[index]
     updateProviders([
       ...providers.slice(0, index + 1),
-      { ...provider, id: `${provider.id || 'provider'}-copy`, name: `${provider.name || 'Provider'} 副本` },
+      { ...provider, id: `${provider.id || 'provider'}-copy`, name: `${provider.name || 'Provider'} ${ui.copySuffix}` },
       ...providers.slice(index + 1),
     ])
   }
@@ -702,25 +1477,30 @@ function ProviderPanel(props: WorkspaceProps) {
     updateProviders(providers.filter((_, providerIndex) => providerIndex !== index))
   }
 
-  function exportProviders() {
-    const blob = new Blob([buildProviderExportJson(props.aiProvidersJson)], { type: 'application/json;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'olienta-ai-providers.json'
-    link.click()
-    URL.revokeObjectURL(url)
+  function updateProviderModel(index: number, modelIndex: number, value: string) {
+    const provider = providers[index]
+    const models = providerModels(provider)
+    const nextModels = models.map((model, currentIndex) => currentIndex === modelIndex ? value : model)
+    updateProvider(index, { models: nextModels, model: nextModels[0] ?? '' })
   }
 
-  async function importProviders(file: File | undefined) {
-    if (!file) return
-    const content = await file.text()
-    try {
-      const parsedContent = JSON.parse(content) as unknown
-      props.onChangeAiProvidersJson(`${JSON.stringify(parsedContent, null, 2)}\n`)
-    } catch {
-      props.onChangeAiProvidersJson(content.endsWith('\n') ? content : `${content}\n`)
-    }
+  function addProviderModel(index: number) {
+    const provider = providers[index]
+    const nextModels = [...providerModels(provider), '']
+    updateProvider(index, { models: nextModels, model: nextModels[0] ?? '' })
+  }
+
+  function removeProviderModel(index: number, modelIndex: number) {
+    const provider = providers[index]
+    const nextModels = providerModels(provider).filter((_, currentIndex) => currentIndex !== modelIndex)
+    const safeModels = nextModels.length > 0 ? nextModels : ['']
+    updateProvider(index, { models: safeModels, model: safeModels[0] ?? '' })
+  }
+
+  async function saveProviders() {
+    setSaveState('saving')
+    const ok = await props.onSaveAiProviders()
+    setSaveState(ok ? 'saved' : 'failed')
   }
 
   return (
@@ -728,54 +1508,85 @@ function ProviderPanel(props: WorkspaceProps) {
       <section className="provider-overview">
         <div className="card-heading">
           <div>
-            <h2>AI Provider</h2>
-            <p>按顺序匹配用途；同一用途会优先使用排在前面的可用 Provider。</p>
+            <h2>{ui.title}</h2>
+            <p>{ui.description}</p>
           </div>
           <div className="editor-actions">
-            <button type="button" className="ghost-button" onClick={addProvider} disabled={!parsed.ok}>新增</button>
-            <button type="button" className="ghost-button" onClick={exportProviders}>导出 JSON</button>
-            <button type="button" className="ghost-button" onClick={() => importInputRef.current?.click()}>导入 JSON</button>
-            <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>测试</button>
-            <span className="status-pill">{props.providerTestMessage}</span>
+            <button type="button" className="ghost-button" onClick={addProvider} disabled={!parsed.ok}>{ui.add}</button>
+            <button type="button" className="primary-button" onClick={() => void saveProviders()} disabled={!parsed.ok || saveState === 'saving'}>
+              {saveState === 'saving' ? ui.saving : ui.save}
+            </button>
+            <button type="button" className="ghost-button" onClick={props.onTestAiProvider}>{ui.test}</button>
+            <span className="status-pill">
+              {saveState === 'saved'
+                ? props.providerTestMessage || ui.saved
+                : saveState === 'failed'
+                  ? props.providerTestMessage || ui.saveFailed
+                  : props.providerTestMessage}
+            </span>
           </div>
         </div>
-        <input
-          ref={importInputRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(event) => {
-            void importProviders(event.target.files?.[0]).finally(() => {
-              event.currentTarget.value = ''
-            })
-          }}
-        />
-        {!parsed.ok && <p className="empty-note danger">Provider JSON 无法解析：{parsed.message}</p>}
-        {parsed.ok && <p className="empty-note">API Key 保存到项目时会转为本地加密字段；导出 JSON 默认不包含密钥。</p>}
+        {!parsed.ok && <p className="empty-note danger">{ui.parseFailed}: {parsed.message}</p>}
+        {parsed.ok && <p className="empty-note">{ui.securityNote}</p>}
+        {parsed.ok && (
+          <section className="provider-list-summary" aria-label={ui.configuredApis}>
+            <div className="section-title-row">
+              <div>
+                <h3>{ui.configuredApis}</h3>
+                <p>{ui.providerListDescription}</p>
+              </div>
+              <strong>{providers.filter((provider) => provider.enabled !== false).length}/{providers.length} {ui.available}</strong>
+            </div>
+            {providers.length === 0 ? (
+              <p className="empty-note">{ui.emptyProviders}</p>
+            ) : (
+              <div className="provider-list-rows">
+                {providers.map((provider, index) => (
+                  <article key={`${provider.id}-${index}`}>
+                    <span className={provider.enabled === false ? 'muted' : 'ready'}>
+                      {provider.enabled === false ? ui.disabled : ui.enabled}
+                    </span>
+                    <div>
+                      <strong>{provider.name || provider.id || `Provider ${index + 1}`}</strong>
+                      <small>{provider.model || ui.modelMissing} / {provider.baseUrl || ui.baseUrlMissing}</small>
+                    </div>
+                    <em>{providerKeyStatus(provider, props.locale)}</em>
+                    <small>{provider.useCases.length === 0 ? ui.allWritingTasks : ui.customTasks}</small>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+        <div className="provider-author-summary">
+          <article>
+            <span>{ui.currentStatus}</span>
+            <strong>{props.providerTestMessage || ui.notTested}</strong>
+          </article>
+          <article>
+            <span>{ui.defaultModel}</span>
+            <strong>{providers.find((provider) => provider.enabled !== false)?.model || ui.notConfigured}</strong>
+          </article>
+          <article>
+            <span>{ui.scope}</span>
+            <strong>{ui.globalScope}</strong>
+          </article>
+        </div>
         {parsed.ok && (
           <>
-            <div className="provider-coverage-grid">
-              {coverage.map((item) => (
-                <article key={item.key}>
-                  <span>{item.title}</span>
-                  <strong>{item.provider?.name || item.provider?.id || '未覆盖'}</strong>
-                  <small>{item.provider?.model || item.detail}</small>
-                </article>
-              ))}
-            </div>
             <div className="provider-grid">
               {providers.map((provider, index) => (
                 <article className={`provider-card ${provider.enabled === false ? 'disabled' : ''}`} key={`${provider.id}-${index}`}>
                   <div className="provider-card-header">
                     <div>
                       <h3>{provider.name || provider.id || `Provider ${index + 1}`}</h3>
-                      <p>{provider.kind || 'openai-compatible'} · {provider.model || '未设置模型'}</p>
+                      <p>{provider.kind || 'openai-compatible'} / {provider.model || ui.modelMissing}</p>
                     </div>
                     <div className="editor-actions">
-                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, -1)} disabled={index === 0}>上移</button>
-                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, 1)} disabled={index === providers.length - 1}>下移</button>
-                      <button type="button" className="ghost-button" onClick={() => duplicateProvider(index)}>复制</button>
-                      <button type="button" className="ghost-button danger" onClick={() => deleteProvider(index)}>删除</button>
+                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, -1)} disabled={index === 0}>{ui.moveUp}</button>
+                      <button type="button" className="ghost-button" onClick={() => moveProvider(index, 1)} disabled={index === providers.length - 1}>{ui.moveDown}</button>
+                      <button type="button" className="ghost-button" onClick={() => duplicateProvider(index)}>{ui.copy}</button>
+                      <button type="button" className="ghost-button danger" onClick={() => deleteProvider(index)}>{ui.delete}</button>
                     </div>
                   </div>
                   <div className="provider-settings">
@@ -785,26 +1596,58 @@ function ProviderPanel(props: WorkspaceProps) {
                         checked={provider.enabled !== false}
                         onChange={(event) => updateProvider(index, { enabled: event.target.checked })}
                       />
-                      <span>启用</span>
+                      <span>{ui.enable}</span>
                     </label>
                     <label>
-                      <span>名称</span>
+                      <span>{ui.name}</span>
                       <input value={provider.name} onChange={(event) => updateProvider(index, { name: event.target.value })} />
                     </label>
                     <label>
-                      <span>类型</span>
-                      <input value={provider.kind} onChange={(event) => updateProvider(index, { kind: event.target.value })} />
+                      <span>{ui.type}</span>
+                      <select value={provider.kind} onChange={(event) => updateProvider(index, { kind: event.target.value })}>
+                        {PROVIDER_KIND_OPTIONS.map((option) => (
+                          <option value={option.value} key={option.value}>
+                            {props.locale === 'en-US' ? option.en : option.zh}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label>
                       <span>Base URL</span>
                       <input value={provider.baseUrl} onChange={(event) => updateProvider(index, { baseUrl: event.target.value })} />
                     </label>
                     <label>
-                      <span>模型</span>
-                      <input value={provider.model} onChange={(event) => updateProvider(index, { model: event.target.value })} />
+                      <span>API Key</span>
+                      <input
+                        type="password"
+                        value={provider.apiKey ?? ''}
+                        placeholder={ui.apiKeyPlaceholder}
+                        onChange={(event) => updateProvider(index, { apiKey: event.target.value })}
+                      />
                     </label>
+                    <div className="provider-model-list">
+                      <div className="provider-model-list-heading">
+                        <span>{ui.models}</span>
+                        <button type="button" className="ghost-button" onClick={() => addProviderModel(index)}>{ui.addModel}</button>
+                      </div>
+                      {providerModels(provider).map((model, modelIndex) => (
+                        <label className="provider-model-row" key={`${provider.id}-${modelIndex}`}>
+                          <span>{modelIndex === 0 ? ui.defaultModel : `${ui.model} ${modelIndex + 1}`}</span>
+                          <input
+                            value={model}
+                            placeholder={modelIndex === 0 ? ui.defaultModelPlaceholder : ui.modelPlaceholder}
+                            onChange={(event) => updateProviderModel(index, modelIndex, event.target.value)}
+                          />
+                          {modelIndex > 0 && (
+                            <button type="button" className="ghost-button danger" onClick={() => removeProviderModel(index, modelIndex)}>
+                              {ui.removeModel}
+                            </button>
+                          )}
+                        </label>
+                      ))}
+                    </div>
                     <label>
-                      <span>上下文窗口</span>
+                      <span>{ui.contextWindow}</span>
                       <input
                         type="number"
                         step="1000"
@@ -814,7 +1657,7 @@ function ProviderPanel(props: WorkspaceProps) {
                       />
                     </label>
                     <label>
-                      <span>温度</span>
+                      <span>{ui.temperature}</span>
                       <input
                         type="number"
                         step="0.1"
@@ -825,7 +1668,7 @@ function ProviderPanel(props: WorkspaceProps) {
                       />
                     </label>
                     <label>
-                      <span>最大输出</span>
+                      <span>{ui.maxOutput}</span>
                       <input
                         type="number"
                         step="256"
@@ -835,48 +1678,16 @@ function ProviderPanel(props: WorkspaceProps) {
                       />
                     </label>
                     <label>
-                      <span>超时秒数</span>
+                      <span>{ui.timeoutSeconds}</span>
                       <input
                         type="number"
                         step="5"
                         min="5"
                         max="300"
-                        value={provider.timeoutSeconds ?? 90}
+                        value={provider.timeoutSeconds ?? 180}
                         onChange={(event) => updateProvider(index, { timeoutSeconds: numberOrUndefined(event.target.value) })}
                       />
                     </label>
-                    <label>
-                      <span>输入百万 Token 美元</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={provider.inputPricePerMillionTokens ?? 0}
-                        onChange={(event) => updateProvider(index, { inputPricePerMillionTokens: numberOrUndefined(event.target.value) })}
-                      />
-                    </label>
-                    <label>
-                      <span>输出百万 Token 美元</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={provider.outputPricePerMillionTokens ?? 0}
-                        onChange={(event) => updateProvider(index, { outputPricePerMillionTokens: numberOrUndefined(event.target.value) })}
-                      />
-                    </label>
-                  </div>
-                  <div className="use-case-row">
-                    {PROVIDER_USE_CASES.map((useCase) => (
-                      <label key={useCase.key}>
-                        <input
-                          type="checkbox"
-                          checked={provider.useCases.includes(useCase.key)}
-                          onChange={() => toggleUseCase(index, useCase.key)}
-                        />
-                        <span>{useCase.title}</span>
-                      </label>
-                    ))}
                   </div>
                 </article>
               ))}
@@ -884,13 +1695,6 @@ function ProviderPanel(props: WorkspaceProps) {
           </>
         )}
       </section>
-      <MarkdownDocument
-        title="原始 JSON"
-        path=".olienta/ai-providers.json"
-        value={props.aiProvidersJson}
-        onChange={props.onChangeAiProvidersJson}
-        onSave={props.onSaveAiProviders}
-      />
     </section>
   )
 }
@@ -982,6 +1786,7 @@ type AiProviderDraft = {
   baseUrl: string
   apiKey?: string
   model: string
+  models?: string[]
   contextWindow?: number
   temperature?: number
   maxTokens?: number
@@ -992,13 +1797,10 @@ type AiProviderDraft = {
   [key: string]: unknown
 }
 
-const PROVIDER_USE_CASES = [
-  { key: 'chapter', title: '整章正文', detail: '候选稿生成' },
-  { key: 'blueprint', title: '章节蓝图', detail: '蓝图草案' },
-  { key: 'framework', title: '故事框架', detail: '框架草案' },
-  { key: 'facts', title: '事实抽取', detail: '后续 AI 抽取' },
-  { key: 'timeline', title: '时间线', detail: 'Pro 冲突检查' },
-  { key: 'style', title: '风格提示', detail: '风格辅助' },
+const PROVIDER_KIND_OPTIONS = [
+  { value: 'openai-compatible', zh: 'OpenAI 兼容', en: 'OpenAI-compatible' },
+  { value: 'anthropic', zh: 'Anthropic', en: 'Anthropic' },
+  { value: 'custom', zh: '自定义', en: 'Custom' },
 ]
 
 function parseProviders(content: string): { ok: true; providers: AiProviderDraft[] } | { ok: false; message: string } {
@@ -1021,6 +1823,10 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
   const useCases = Array.isArray(value.useCases)
     ? value.useCases.filter((useCase): useCase is string => typeof useCase === 'string')
     : []
+  const models = Array.isArray(value.models)
+    ? value.models.filter((model): model is string => typeof model === 'string')
+    : []
+  const model = typeof value.model === 'string' ? value.model : models[0] ?? ''
   return {
     ...value,
     id: typeof value.id === 'string' ? value.id : `provider-${index + 1}`,
@@ -1028,14 +1834,131 @@ function normalizeProviderDraft(item: unknown, index: number): AiProviderDraft {
     kind: typeof value.kind === 'string' ? value.kind : 'openai-compatible',
     enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
     baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
-    model: typeof value.model === 'string' ? value.model : '',
+    model,
+    models: models.length > 0 ? models : [model],
     contextWindow: typeof value.contextWindow === 'number' ? value.contextWindow : 0,
     temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
     maxTokens: typeof value.maxTokens === 'number' ? value.maxTokens : 0,
-    timeoutSeconds: typeof value.timeoutSeconds === 'number' ? value.timeoutSeconds : 90,
+    timeoutSeconds: typeof value.timeoutSeconds === 'number' ? value.timeoutSeconds : 180,
     inputPricePerMillionTokens: typeof value.inputPricePerMillionTokens === 'number' ? value.inputPricePerMillionTokens : 0,
     outputPricePerMillionTokens: typeof value.outputPricePerMillionTokens === 'number' ? value.outputPricePerMillionTokens : 0,
     useCases,
+  }
+}
+
+function providerKeyStatus(provider: AiProviderDraft, locale: WorkspaceProps['locale']) {
+  if (typeof provider.apiKey === 'string' && provider.apiKey.trim()) {
+    return locale === 'en-US' ? 'Key entered' : 'Key 已填'
+  }
+  if (typeof provider.apiKeyEncrypted === 'string' && provider.apiKeyEncrypted.trim()) {
+    return locale === 'en-US' ? 'Key saved locally' : 'Key 已本地保存'
+  }
+  return locale === 'en-US' ? 'API Key missing' : '缺 API Key'
+}
+
+function providerModels(provider: AiProviderDraft) {
+  if (Array.isArray(provider.models) && provider.models.length > 0) return provider.models
+  return [provider.model ?? '']
+}
+
+function providerPanelCopy(locale: WorkspaceProps['locale']) {
+  if (locale === 'en-US') {
+    return {
+      title: 'AI API Settings',
+      description: 'Connect one available AI model and Olienta will use it across writing, outlining, facts, and chapter drafts.',
+      add: 'Add',
+      save: 'Save',
+      saving: 'Saving',
+      test: 'Test',
+      saved: 'Saved to app settings',
+      saveFailed: 'Save failed',
+      parseFailed: 'Provider JSON could not be parsed',
+      securityNote: 'API Keys are saved in local app settings and are not written into project manuscripts or materials.',
+      configuredApis: 'Configured APIs',
+      providerListDescription: 'The first enabled API is used by default. Move providers up or down to change priority.',
+      available: 'available',
+      emptyProviders: 'No API yet. Click Add, then fill in the API Key and model.',
+      disabled: 'Disabled',
+      enabled: 'Enabled',
+      modelMissing: 'Model not set',
+      baseUrlMissing: 'Base URL not set',
+      allWritingTasks: 'All writing tasks',
+      customTasks: 'Custom tasks',
+      currentStatus: 'Status',
+      notTested: 'Not tested yet',
+      defaultModel: 'Default model',
+      notConfigured: 'Not configured',
+      scope: 'Scope',
+      globalScope: 'Available to the whole app',
+      moveUp: 'Up',
+      moveDown: 'Down',
+      copy: 'Copy',
+      delete: 'Delete',
+      enable: 'Enable',
+      name: 'Name',
+      type: 'Type',
+      apiKeyPlaceholder: 'Paste and save. The key is stored locally.',
+      model: 'Model',
+      models: 'Models',
+      addModel: 'Add model',
+      removeModel: 'Remove',
+      defaultModelPlaceholder: 'Default model, e.g. deepseek-v4-pro',
+      modelPlaceholder: 'Another model, e.g. deepseek-v4-flash',
+      contextWindow: 'Context window',
+      temperature: 'Temperature',
+      maxOutput: 'Max output',
+      timeoutSeconds: 'Timeout seconds',
+      newProviderName: 'New Provider',
+      copySuffix: 'Copy',
+    }
+  }
+  return {
+    title: 'AI API 设置',
+    description: '接入一个可用模型后，Olienta 会在写作、蓝图、事实抽取和候选稿中全局使用它。',
+    add: '新增',
+    save: '保存',
+    saving: '保存中',
+    test: '测试',
+    saved: '已保存到软件设置',
+    saveFailed: '保存失败',
+    parseFailed: 'Provider JSON 无法解析',
+    securityNote: 'API Key 只保存到本机软件设置中，不会写入小说正文或资料文件。',
+    configuredApis: '已配置 API',
+    providerListDescription: '默认使用第一个启用的 API；上移、下移可以调整优先级。',
+    available: '可用',
+    emptyProviders: '还没有 API。点击“新增”后填入 API Key 和模型。',
+    disabled: '停用',
+    enabled: '启用',
+    modelMissing: '未设置模型',
+    baseUrlMissing: '未设置 Base URL',
+    allWritingTasks: '全部写作任务',
+    customTasks: '自定义任务',
+    currentStatus: '当前状态',
+    notTested: '尚未测试',
+    defaultModel: '默认模型',
+    notConfigured: '未设置',
+    scope: '使用范围',
+    globalScope: '全软件可用',
+    moveUp: '上移',
+    moveDown: '下移',
+    copy: '复制',
+    delete: '删除',
+    enable: '启用',
+    name: '名称',
+    type: '类型',
+    apiKeyPlaceholder: '粘贴后保存，密钥只保存在本机',
+    model: '模型',
+    models: '模型',
+    addModel: '增加模型',
+    removeModel: '移除',
+    defaultModelPlaceholder: '默认模型，如 deepseek-v4-pro',
+    modelPlaceholder: '其它模型，如 deepseek-v4-flash',
+    contextWindow: '上下文窗口',
+    temperature: '温度',
+    maxOutput: '最大输出',
+    timeoutSeconds: '超时秒数',
+    newProviderName: '新 Provider',
+    copySuffix: '副本',
   }
 }
 
@@ -1051,4 +1974,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   return `${Math.round(bytes / 1024)} KB`
+}
+
+function isUndoConfirmationPath(path: string) {
+  return /\/undo-\d+\.md$/.test(path) || /\/[^/]+-undo-\d+\.md$/.test(path)
+}
+
+function confirmationRecordType(path: string) {
+  return isUndoConfirmationPath(path) ? 'undo' : 'adopted'
+}
+
+function confirmationChapterId(path: string) {
+  const parts = path.split('/')
+  const fileName = parts.pop()?.replace(/\.md$/, '') ?? path
+  const parent = parts.at(-1)
+  if (parent && parts.at(-2) === 'confirmations') return parent
+  const undoMatch = /^(.*)-undo-\d+$/.exec(fileName)
+  return undoMatch ? undoMatch[1] : fileName
+}
+
+function isLatestConfirmationPath(path: string) {
+  return /^logs\/confirmations\/[^/]+\.md$/.test(path)
+}
+
+function confirmationTimestampFromPath(path: string) {
+  const match = /\/(?:v|undo-)(\d+)\.md$/.exec(path)
+  return match ? Number(match[1]) : 0
+}
+
+function latestConfirmationPathFor(path: string) {
+  return `logs/confirmations/${confirmationChapterId(path)}.md`
+}
+
+function parseConfirmationAdoptionMode(content: string) {
+  const match = content.match(/-\s*(?:采用方式|mode|adoption mode)\s*[:：]\s*([^\n\r]+)/i)
+  return match?.[1]?.trim() ?? ''
+}
+
+function formatAdoptionMode(mode: string) {
+  const labels: Record<string, string> = {
+    replace: '替换正文',
+    append: '追加到正文',
+    insert: '插入光标',
+    'replace-paragraph': '替换正文段',
+    'undo-replace-paragraph': '撤销段落替换',
+  }
+  return labels[mode] || mode
+}
+
+function formatConfirmationTitle(path: string) {
+  const chapterId = confirmationChapterId(path)
+  return isUndoConfirmationPath(path)
+    ? `Chapter ${chapterId} undo confirmation`
+    : `Chapter ${chapterId} adoption confirmation`
 }

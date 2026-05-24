@@ -32,21 +32,42 @@ pub fn load_recent_projects(
     }
 
     let content = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&content).unwrap_or_default())
+    let projects: Vec<RecentProject> = serde_json::from_str(&content).unwrap_or_default();
+    Ok(projects
+        .into_iter()
+        .map(normalize_recent_project)
+        .filter(|project| {
+            PathBuf::from(&project.root_path)
+                .join("project.yaml")
+                .exists()
+        })
+        .collect())
 }
 
 pub fn remember_recent_project(
     app_handle: &tauri::AppHandle,
     project: RecentProject,
 ) -> Result<Vec<RecentProject>, RecentProjectsError> {
+    let project = normalize_recent_project(project);
     let mut projects = load_recent_projects(app_handle)?;
-    projects.retain(|item| item.root_path != project.root_path);
+    projects.retain(|item| item.root_path != project.root_path && item.name != project.name);
     projects.insert(0, project);
     projects.truncate(12);
 
     let path = recent_projects_path(app_handle)?;
     atomic_write_text(&path, &(serde_json::to_string_pretty(&projects)? + "\n"))?;
     Ok(projects)
+}
+
+fn normalize_recent_project(project: RecentProject) -> RecentProject {
+    RecentProject {
+        name: project.name,
+        root_path: strip_windows_verbatim_prefix(&project.root_path).to_owned(),
+    }
+}
+
+fn strip_windows_verbatim_prefix(path: &str) -> &str {
+    path.strip_prefix(r"\\?\").unwrap_or(path)
 }
 
 fn recent_projects_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, std::io::Error> {
@@ -77,13 +98,15 @@ mod tests {
         ];
         let project = RecentProject {
             name: "A2".to_owned(),
-            root_path: "one".to_owned(),
+            root_path: r"\\?\one".to_owned(),
         };
 
+        let project = normalize_recent_project(project);
         projects.retain(|item| item.root_path != project.root_path);
         projects.insert(0, project);
 
         assert_eq!(projects[0].name, "A2");
+        assert_eq!(projects[0].root_path, "one");
         assert_eq!(projects.len(), 2);
     }
 }

@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a writer-facing improvement for Olienta Writer.
+title: "[Feature]: "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Olienta is author-first. Please describe the writing workflow or creative pain this feature would improve.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Writer problem
+      description: What is hard, slow, confusing, or missing today?
+      placeholder: "Example: I need to compare a generated candidate draft with the confirmed chapter without losing my place."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should Olienta do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Writing flow
+        - AI generation
+        - Manuscript editing
+        - Blueprint or outline
+        - Knowledge base
+        - Skill system
+        - Export
+        - Mobile or capture workflow
+        - Open source or developer experience
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Describe any workaround or simpler version.
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I may be able to help test this feature.
+        - label: I may be able to help implement this feature.

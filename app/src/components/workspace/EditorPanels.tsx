@@ -1,45 +1,175 @@
-import { useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import type { CandidateReviewIssue, ContractFulfillmentSummary } from '../../types'
 import type { WorkspaceProps } from './types'
+import { MarkdownEditorKernel, type MarkdownEditorKernelHandle } from './MarkdownEditorKernel'
+import * as tauriApi from '../../api/tauriApi'
 import {
-  applyMarkdownAction,
+  candidateTextForAdoption,
   cleanPastedText,
   compareInlineDiff,
   compareParagraphs,
+  compareSimilarParagraphs,
   countParagraphs,
   estimateTextUnits,
-  markdownActionForKey,
-  replaceSelection,
+  findKnowledgeHitsForParagraph,
   type MarkdownAction,
+  type KnowledgeHit,
 } from '../../lib/editorLogic'
 
 type ReviewGroup = {
   key: string
   title: string
   tone: 'danger' | 'warning' | 'info'
-  items: string[]
+  items: CandidateReviewIssue[]
 }
 
 const INLINE_DIFF_TOKEN_LIMIT = 900
 
-const REVIEW_GROUPS: Array<Omit<ReviewGroup, 'items'> & { match: (warning: string) => boolean }> = [
-  { key: 'timeline', title: '时间线与里程碑', tone: 'danger', match: (warning) => warning.includes('时间线') || warning.includes('里程碑') || warning.includes('提前触发') },
-  { key: 'blueprint', title: '章节蓝图', tone: 'danger', match: (warning) => warning.includes('蓝图') || warning.includes('本章必须') || warning.includes('禁区') },
-  { key: 'facts', title: '事实库与禁写规则', tone: 'danger', match: (warning) => warning.includes('事实') || warning.includes('禁写') },
-  { key: 'characters', title: '角色边界', tone: 'warning', match: (warning) => warning.includes('角色') },
-  { key: 'pinned', title: '钉选材料', tone: 'warning', match: (warning) => warning.includes('钉选材料') },
-  { key: 'loops', title: '伏笔与回收', tone: 'warning', match: (warning) => warning.includes('伏笔') },
-  { key: 'generation', title: '生成与任务书', tone: 'info', match: (warning) => warning.includes('生成来源') || warning.includes('写作任务书') || warning.includes('AI 调用降级') },
+const REVIEW_GROUPS: Array<Omit<ReviewGroup, 'items'> & { match: (issue: CandidateReviewIssue) => boolean }> = [
+  { key: 'revision', title: '本轮回修目标', tone: 'danger', match: (issue) => issue.category === 'revision' },
+  { key: 'timeline', title: '时间线与里程碑', tone: 'danger', match: (issue) => issue.category === 'timeline' },
+  { key: 'blueprint', title: '章节蓝图', tone: 'danger', match: (issue) => issue.category === 'blueprint' },
+  { key: 'facts', title: '事实库与禁写规则', tone: 'danger', match: (issue) => issue.category === 'fact' || issue.category === 'setting' },
+  { key: 'characters', title: '角色边界', tone: 'warning', match: (issue) => issue.category === 'character' },
+  { key: 'pinned', title: '钉选材料', tone: 'warning', match: (issue) => issue.category === 'context' },
+  { key: 'loops', title: '伏笔与回收', tone: 'warning', match: (issue) => issue.category === 'continuity' },
+  { key: 'style', title: '文风指纹', tone: 'warning', match: (issue) => issue.category === 'style' || issue.description.includes('Style Fingerprint') },
+  { key: 'generation', title: '生成与本章写作要求', tone: 'info', match: (issue) => issue.category === 'generation' },
   { key: 'quality', title: '文本质量', tone: 'info', match: () => true },
 ]
 
+function StyleFingerprintCard(props: {
+  rootPath: string
+  writingBrief: string
+  onRefresh: () => void
+  onReveal: () => void
+}) {
+  const [editingControls, setEditingControls] = useState(false)
+  const [styleControls, setStyleControls] = useState('')
+  const [styleControlsStatus, setStyleControlsStatus] = useState('')
+  const lines = extractStyleFingerprintLines(props.writingBrief)
+  const hasFingerprint = lines.some((line) => !line.includes('Not enough confirmed manuscript yet'))
+
+  useEffect(() => {
+    if (!props.rootPath || !editingControls) return
+    let cancelled = false
+    tauriApi.loadFrameworkFile(props.rootPath, '06-style.md')
+      .then((document) => {
+        if (cancelled) return
+        setStyleControls(document.content)
+        setStyleControlsStatus(`已读取 ${document.relative_path}`)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setStyleControlsStatus(error instanceof Error ? error.message : '读取文风配置失败')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [props.rootPath, editingControls])
+
+  function toggleEditingControls() {
+    const next = !editingControls
+    setEditingControls(next)
+    if (next) setStyleControlsStatus('正在读取文风配置')
+  }
+
+  async function saveStyleControls() {
+    if (!props.rootPath) return
+    setStyleControlsStatus('正在保存文风配置')
+    try {
+      const saved = await tauriApi.saveFrameworkFile(props.rootPath, '06-style.md', styleControls)
+      setStyleControls(saved.content)
+      setStyleControlsStatus(`已保存 ${saved.relative_path}`)
+      props.onRefresh()
+    } catch (error) {
+      setStyleControlsStatus(error instanceof Error ? error.message : '保存文风配置失败')
+    }
+  }
+
+  return (
+    <section className="style-fingerprint-card">
+      <div className="card-heading">
+        <div>
+          <h3>文风指纹</h3>
+          <p>{hasFingerprint ? '已从确认正文提取当前项目声音基线。' : '确认正文不足时会显示待生成状态。'}</p>
+        </div>
+        <div className="inline-actions">
+          <button type="button" className="ghost-button" onClick={props.onRefresh}>刷新</button>
+          <button type="button" className="ghost-button" onClick={toggleEditingControls}>
+            {editingControls ? '收起规则' : '编辑规则'}
+          </button>
+          <button type="button" className="ghost-button" onClick={props.onReveal} disabled={!hasFingerprint}>打开快照</button>
+        </div>
+      </div>
+      <ul>
+        {lines.map((line) => (
+          <li key={line}>{line.replace(/^- /, '')}</li>
+        ))}
+      </ul>
+      {editingControls && (
+        <div className="style-controls-editor">
+          <textarea
+            value={styleControls}
+            onChange={(event) => setStyleControls(event.target.value)}
+            spellCheck={false}
+            aria-label="文风人工约束"
+            placeholder={'# 文风配置\n\n- 锁定：保持某类意象或句式\n- 禁用：不要出现的短语\n'}
+          />
+          <div>
+            <span>{styleControlsStatus}</span>
+            <button type="button" className="primary-button" onClick={() => void saveStyleControls()} disabled={!props.rootPath}>
+              保存规则并刷新
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function extractStyleFingerprintLines(writingBrief: string) {
+  const marker = '## Style Fingerprint v1'
+  const start = writingBrief.indexOf(marker)
+  if (start < 0) {
+    return ['尚未生成本章写作要求。点击刷新后会根据已确认正文生成文风指纹。']
+  }
+
+  const rest = writingBrief.slice(start + marker.length)
+  const nextHeading = rest.search(/\n##\s+/)
+  const section = nextHeading >= 0 ? rest.slice(0, nextHeading) : rest
+  const lines = section
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '))
+
+  return lines.length > 0 ? lines : ['尚未识别到可展示的文风指纹。']
+}
+
 export function DraftPanel(props: WorkspaceProps) {
+  const [pendingReplacementKey, setPendingReplacementKey] = useState('')
   const candidateUnits = estimateTextUnits(props.candidate)
   const manuscriptUnits = estimateTextUnits(props.manuscript)
   const candidateParagraphs = countParagraphs(props.candidate)
   const manuscriptParagraphs = countParagraphs(props.manuscript)
   const candidateDiff = compareParagraphs(props.candidate, props.manuscript)
   const inlineDiff = compareInlineDiff(props.candidate, props.manuscript)
-  const reviewGroups = groupCandidateWarnings(props.candidateWarnings)
+  const paragraphInlineDiffs = compareSimilarParagraphs(props.candidate, props.manuscript)
+  const candidateReviewIssues = props.candidateReviewIssues.length > 0
+    ? props.candidateReviewIssues
+    : props.candidateWarnings.map(issueFromWarning)
+  const reviewGroups = groupCandidateReviewIssues(candidateReviewIssues)
+  const revisionReviewIssues = candidateReviewIssues.filter((issue) => issue.category === 'revision')
+  const timelineReviewGroup = reviewGroups.find((group) => group.key === 'timeline')
+  const insertionLabel = formatSelectionLabel(props.manuscriptSelection, props.manuscript.length)
+  const candidateSelectionLabel = formatCandidateSelectionLabel(props.candidateSelection, props.candidate)
+  const candidateForAdoption = candidateTextForAdoption(props.candidate, props.candidateSelection)
+  const insertDisabled = candidateForAdoption.trim().length === 0
+  const activePendingReplacementKey = paragraphInlineDiffs.some(
+    (item) => paragraphPairKey(item.candidate, item.manuscript) === pendingReplacementKey,
+  )
+    ? pendingReplacementKey
+    : ''
 
   return (
     <section className="draft-workspace">
@@ -47,14 +177,19 @@ export function DraftPanel(props: WorkspaceProps) {
         <section className="chapter-chain">
           <div className="chapter-chain-heading">
             <div>
-              <h2>候选稿审查流程</h2>
+              <h2>正文草稿审查流程</h2>
               <p>AI 输出只停留在候选稿中，必须由作者明确采用后才进入正文。</p>
             </div>
-            <span>{props.currentChapter.title}</span>
+            <div className="chapter-chain-actions">
+              <span>{props.currentChapter.title}</span>
+              <button type="button" className="ghost-button" onClick={() => props.onSelectView('manuscript')}>
+                返回本章正文
+              </button>
+            </div>
           </div>
           <div className="chapter-chain-steps">
             <article className="chapter-chain-step confirmed">
-              <div><strong>任务书</strong><span>{props.writingBriefPath}</span></div>
+              <div><strong>本章写作要求</strong><span>{props.writingBriefPath}</span></div>
               <p>由蓝图、作者输入、事实库、Skill 和钉选材料装配而成。</p>
             </article>
             <article className="chapter-chain-step active">
@@ -63,10 +198,32 @@ export function DraftPanel(props: WorkspaceProps) {
             </article>
             <article className="chapter-chain-step draft">
               <div><strong>正文</strong><span>{props.selectedChapterId}</span></div>
-              <p>只有替换或追加才会把候选稿写入已确认章节。</p>
+              <p>只有作者点击追加、插入或替换后，候选稿才会写入已确认章节。</p>
             </article>
           </div>
         </section>
+
+        <section className="candidate-safety-card">
+          <div>
+            <strong>候选稿不会自动进入正文</strong>
+            <span>生成、保存、审查候选稿都只影响正文草稿版本。正文只有在你明确采用后才改变。</span>
+          </div>
+          <div>
+            <strong>采用前先看范围和位置</strong>
+            <span>下方会显示当前采用的是候选稿选区还是整份候选稿，以及会写入正文哪里。</span>
+          </div>
+          <div>
+            <strong>替换整章正文是高风险动作</strong>
+            <span>正文已有内容时，优先考虑追加或插入；替换会用候选稿覆盖当前章正文。</span>
+          </div>
+        </section>
+
+        <StyleFingerprintCard
+          rootPath={props.project?.root_path ?? ''}
+          writingBrief={props.writingBrief}
+          onRefresh={props.onComposeBrief}
+          onReveal={() => props.onRevealProjectPath('.olienta/style-fingerprint.md')}
+        />
 
         <MarkdownDocument
           title="候选稿"
@@ -74,23 +231,58 @@ export function DraftPanel(props: WorkspaceProps) {
           value={props.candidate}
           onChange={props.onChangeCandidate}
           onSave={props.onSaveCandidate}
+          onSelectionChange={props.onChangeCandidateSelection}
+          restoreSelection={props.candidateRestoreSelection}
+          readOnly={props.isProjectReadOnly}
           actions={
-            <>
-              <button className="ghost-button" onClick={props.onComposeBrief}>装配任务书</button>
+            props.isProjectReadOnly ? undefined : <>
+              <button className="ghost-button" onClick={props.onComposeBrief}>生成本章写作要求</button>
               <button className="ghost-button" onClick={props.onGenerateCandidate} disabled={props.candidateGenerationRunning}>
-                {props.candidateGenerationRunning ? '生成中' : '生成'}
+                {props.candidateGenerationRunning ? '生成中' : '生成候选稿'}
               </button>
               {props.candidateGenerationRunning && (
                 <button className="ghost-button danger" onClick={props.onCancelCandidateGeneration}>取消生成</button>
               )}
               <button className="ghost-button" onClick={props.onClearCandidate}>清空</button>
-              <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')}>追加</button>
-              <button className="ghost-button" onClick={() => props.onAdoptCandidate('insert')}>插入光标</button>
-              <button className="primary-button" onClick={() => props.onAdoptCandidate('replace')}>替换</button>
+              <button className="ghost-button" onClick={() => props.onAdoptCandidate('append')} disabled={insertDisabled}>追加到正文末尾</button>
+              <button className="ghost-button" onClick={() => props.onAdoptCandidate('insert')} disabled={insertDisabled}>插入光标到正文</button>
+              <button className="primary-button danger" onClick={() => props.onAdoptCandidate('replace')} disabled={insertDisabled}>替换整章正文</button>
             </>
           }
         />
         <p className="empty-note">{props.candidateGenerationStatus}</p>
+        <RevisionTargetStatusCard
+          issues={revisionReviewIssues}
+          revisionPath={`tasks/contract-revisions/${props.selectedChapterId}.md`}
+          candidatePath={props.candidatePath}
+          generationRunning={props.candidateGenerationRunning}
+          onComposeBrief={props.onComposeBrief}
+          onGenerateCandidate={props.onGenerateCandidate}
+          onRevealProjectPath={props.onRevealProjectPath}
+        />
+        <section className="candidate-adoption-card">
+          <div>
+            <strong>采用位置</strong>
+            <span>{insertionLabel}</span>
+          </div>
+          <div>
+            <strong>采用范围</strong>
+            <span>{candidateSelectionLabel}</span>
+          </div>
+          <p>
+            候选稿有选区时只采用选中内容；没有选区时采用整份候选稿。插入到正文光标会替换正文当前选区；如果没有记录到光标位置，则默认插入到正文末尾。替换整章正文会覆盖当前章正文。
+          </p>
+        </section>
+        {props.recentParagraphReplacement && (
+          <section className="paragraph-replacement-undo-card">
+            <div>
+              <strong>最近段落替换</strong>
+              <button type="button" className="ghost-button" onClick={props.onUndoParagraphReplacement}>撤销替换</button>
+            </div>
+            <p><span>原正文：</span>{props.recentParagraphReplacement.manuscriptPreview}</p>
+            <p><span>候选段：</span>{props.recentParagraphReplacement.candidatePreview}</p>
+          </section>
+        )}
 
         <section className="draft-diff-card">
           <div className="card-heading">
@@ -114,6 +306,9 @@ export function DraftPanel(props: WorkspaceProps) {
               <DiffPreviewList
                 items={candidateDiff.candidateOnly}
                 emptyText="没有发现候选稿相对正文的新增段落。"
+                onLocate={(item) => props.onLocateCandidateText(item)}
+                onInsert={(item) => props.onAdoptCandidateText(item, 'insert')}
+                onAppend={(item) => props.onAdoptCandidateText(item, 'append')}
               />
             </article>
             <article className="diff-column removed">
@@ -124,12 +319,45 @@ export function DraftPanel(props: WorkspaceProps) {
               <DiffPreviewList
                 items={candidateDiff.manuscriptOnly}
                 emptyText="没有发现正文相对候选稿独有的段落。"
+                onLocate={(item) => props.onLocateManuscriptText(item)}
               />
             </article>
           </div>
           <p className="diff-summary">
             共同段落 {candidateDiff.sharedCount} 个。段落对比按规范化后的完整段落匹配，适合采用前快速判断追加或替换风险。
           </p>
+          <section className="paragraph-inline-diff-card">
+            <div className="candidate-review-group-head">
+              <strong>相似段落逐字对比</strong>
+              <span>{paragraphInlineDiffs.length}</span>
+            </div>
+            {paragraphInlineDiffs.length === 0 ? (
+              <p className="empty-note">没有发现足够相似但内容不同的段落。</p>
+            ) : (
+              <div className="paragraph-inline-diff-list">
+                {paragraphInlineDiffs.map((item, index) => (
+                  <ParagraphInlineDiffItem
+                    activePendingReplacementKey={activePendingReplacementKey}
+                    candidate={item.candidate}
+                    confirmedFacts={props.confirmedFacts}
+                    forbiddenRules={props.forbiddenRules}
+                    index={index}
+                    inlineDiff={item.inlineDiff}
+                    manuscript={item.manuscript}
+                    onAdoptCandidateText={props.onAdoptCandidateText}
+                    onLocateCandidateText={props.onLocateCandidateText}
+                    onLocateManuscriptText={props.onLocateManuscriptText}
+                    onOpenKnowledgeHit={props.onOpenKnowledgeHit}
+                    onReplaceManuscriptParagraph={props.onReplaceManuscriptParagraph}
+                    openLoops={props.openLoops}
+                    setPendingReplacementKey={setPendingReplacementKey}
+                    similarity={item.similarity}
+                    key={`${item.similarity}-${index}-${item.candidate}`}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
           <section className="inline-diff-card">
             <div className="candidate-review-group-head">
               <strong>逐字差异预览</strong>
@@ -155,16 +383,24 @@ export function DraftPanel(props: WorkspaceProps) {
           </section>
         </section>
 
-        {props.candidateWarnings.length > 0 && (
+        {candidateReviewIssues.length > 0 && (
           <section className="warning-list">
             <div className="card-heading">
               <div>
                 <h2>审查清单</h2>
                 <p>按风险来源分组；提示不会阻止采用，最终决定仍由作者确认。</p>
               </div>
-              <span>{props.candidateWarnings.length}</span>
+              <span>{candidateReviewIssues.length}</span>
             </div>
             <div className="candidate-review-groups">
+              {timelineReviewGroup && (
+                <TimelineReviewPanel
+                  eventsPath={props.timelineEventsPath}
+                  milestonesPath={props.timelineMilestonesPath}
+                  onRevealProjectPath={props.onRevealProjectPath}
+                  issues={timelineReviewGroup.items}
+                />
+              )}
               {reviewGroups.map((group) => (
                 <article className={`candidate-review-group ${group.tone}`} key={group.key}>
                   <div className="candidate-review-group-head">
@@ -172,7 +408,13 @@ export function DraftPanel(props: WorkspaceProps) {
                     <span>{group.items.length}</span>
                   </div>
                   <ul>
-                    {group.items.map((warning) => <li key={warning}>{warning}</li>)}
+                    {group.items.map((issue) => (
+                      <li className={`candidate-review-issue ${issue.severity}`} key={`${issue.category}-${issue.location}-${issue.description}`}>
+                        <strong>{formatReviewSeverity(issue.severity)} · {formatReviewCategory(issue.category)}</strong>
+                        <span>{issue.description}</span>
+                        <small>{issue.location} · {issue.fix_hint}</small>
+                      </li>
+                    ))}
                   </ul>
                 </article>
               ))}
@@ -180,74 +422,240 @@ export function DraftPanel(props: WorkspaceProps) {
           </section>
         )}
       </div>
+    </section>
+  )
+}
 
-      <aside className="blueprint-history">
-        <div className="panel-heading">
-          <h2>历史版本</h2>
-          <span>{props.candidateHistory.length}</span>
-        </div>
-        <div className="compact-list">
-          {props.candidateHistory.length === 0 && <p className="empty-note">还没有保存过候选稿历史。</p>}
-          {props.candidateHistory.map((item) => (
-            <button
-              type="button"
-              className={`compact-row ${item.relative_path === props.selectedCandidateHistoryPath ? 'active' : ''}`}
-              key={item.relative_path}
-              onClick={() => props.onLoadCandidateHistory(item.relative_path)}
-            >
-              <strong>{item.name}</strong>
-              <span>{item.relative_path}</span>
-              <small>{formatBytes(item.bytes)}</small>
-            </button>
+function ParagraphInlineDiffItem(props: {
+  activePendingReplacementKey: string
+  candidate: string
+  manuscript: string
+  similarity: number
+  index: number
+  inlineDiff: ReturnType<typeof compareInlineDiff>
+  confirmedFacts: string
+  openLoops: string
+  forbiddenRules: string
+  onLocateCandidateText: (content: string) => void
+  onLocateManuscriptText: (content: string) => void
+  onAdoptCandidateText: (content: string, mode?: 'append' | 'insert') => void
+  onReplaceManuscriptParagraph: (candidateParagraph: string, manuscriptParagraph: string) => void
+  onOpenKnowledgeHit: (kind: KnowledgeHit['kind'], text: string) => void
+  setPendingReplacementKey: (key: string) => void
+}) {
+  const pairKey = paragraphPairKey(props.candidate, props.manuscript)
+  const pending = props.activePendingReplacementKey === pairKey
+  const knowledgeHits = findKnowledgeHitsForParagraph(props.candidate, {
+    confirmedFacts: props.confirmedFacts,
+    openLoops: props.openLoops,
+    forbiddenRules: props.forbiddenRules,
+  })
+
+  return (
+    <article
+      className={`paragraph-inline-diff-item ${pending ? 'pending' : ''}`}
+      key={`${props.similarity}-${props.index}-${props.candidate}`}
+    >
+      <div className="paragraph-inline-diff-head">
+        <strong>相似度 {props.similarity}%</strong>
+        <span className="diff-preview-actions">
+          <button type="button" className="ghost-button" onClick={() => props.onLocateCandidateText(props.candidate)}>定位候选稿</button>
+          <button type="button" className="ghost-button" onClick={() => props.onLocateManuscriptText(props.manuscript)}>定位正文</button>
+          <button type="button" className="ghost-button" onClick={() => props.onAdoptCandidateText(props.candidate, 'insert')}>插入候选段</button>
+          {pending ? (
+            <>
+              <button type="button" className="ghost-button danger" onClick={() => {
+                props.setPendingReplacementKey('')
+                props.onReplaceManuscriptParagraph(props.candidate, props.manuscript)
+              }}>确认替换</button>
+              <button type="button" className="ghost-button" onClick={() => props.setPendingReplacementKey('')}>取消</button>
+            </>
+          ) : (
+            <button type="button" className="ghost-button danger" onClick={() => props.setPendingReplacementKey(pairKey)}>替换正文段</button>
+          )}
+        </span>
+      </div>
+      <KnowledgeHitList hits={knowledgeHits} onOpenKnowledgeHit={props.onOpenKnowledgeHit} />
+      {pending && (
+        <p className="replace-confirm-note">将用这段候选稿替换配对的正文段。确认后会立即保存正文并写入作者确认记录。</p>
+      )}
+      <p className="inline-diff-preview compact">
+        {props.inlineDiff.chunks.map((chunk, chunkIndex) => (
+          <span className={`inline-diff-token ${chunk.type}`} key={`${chunk.type}-${chunkIndex}-${chunk.text}`}>
+            {chunk.text}
+          </span>
+        ))}
+      </p>
+    </article>
+  )
+}
+
+function KnowledgeHitList(props: {
+  hits: KnowledgeHit[]
+  onOpenKnowledgeHit: (kind: KnowledgeHit['kind'], text: string) => void
+}) {
+  if (props.hits.length === 0) {
+    return <p className="knowledge-hit-empty">未命中事实、伏笔或禁写规则。</p>
+  }
+
+  return (
+    <div className="knowledge-hit-list">
+      {props.hits.map((hit) => (
+        <button
+          type="button"
+          className={`knowledge-hit ${hit.kind}`}
+          key={`${hit.kind}-${hit.text}`}
+          onClick={() => props.onOpenKnowledgeHit(hit.kind, hit.text)}
+          title="打开来源并定位"
+        >
+          <span>{hit.label}</span>
+          {hit.text}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RevisionTargetStatusCard(props: {
+  issues: CandidateReviewIssue[]
+  revisionPath: string
+  candidatePath: string
+  generationRunning: boolean
+  onComposeBrief: () => void
+  onGenerateCandidate: () => void
+  onRevealProjectPath: (relativePath: string) => void
+}) {
+  const completed = props.issues.filter((issue) => issue.description.includes('回修目标完成'))
+  const pending = props.issues.filter((issue) => issue.description.includes('回修目标未完成'))
+  const hasRevisionTargets = props.issues.length > 0
+  const regenerateForRevisionTargets = () => {
+    props.onComposeBrief()
+    props.onGenerateCandidate()
+  }
+
+  return (
+    <section className={`revision-target-card ${pending.length > 0 ? 'risk' : hasRevisionTargets ? 'clear' : 'empty'}`}>
+      <div className="candidate-review-group-head">
+        <strong>本轮回修目标</strong>
+        <span>{hasRevisionTargets ? `${completed.length}/${props.issues.length}` : '未装配'}</span>
+      </div>
+      <div className="revision-target-metrics">
+        <article>
+          <span>已完成</span>
+          <strong>{completed.length}</strong>
+        </article>
+        <article className={pending.length > 0 ? 'danger' : ''}>
+          <span>未完成</span>
+          <strong>{pending.length}</strong>
+        </article>
+      </div>
+      {pending.length > 0 ? (
+        <ul>
+          {pending.slice(0, 3).map((issue) => (
+            <li key={issue.description}>{issue.description}</li>
           ))}
-        </div>
-        <textarea
-          className="history-preview"
-          readOnly
-          value={props.candidateHistoryPreview || '选择一个已保存的候选稿版本进行预览。'}
-        />
+        </ul>
+      ) : (
+        <p>{hasRevisionTargets ? '候选稿已覆盖当前回修清单中的目标。' : '当前候选稿审查中还没有回修目标记录。'}</p>
+      )}
+      <div className="revision-target-actions">
         <button
           type="button"
           className="primary-button"
-          disabled={!props.selectedCandidateHistoryPath}
-          onClick={props.onRestoreCandidateHistory}
+          disabled={props.generationRunning}
+          onClick={regenerateForRevisionTargets}
         >
-          恢复到编辑器
+          {props.generationRunning ? '生成中' : '按回修目标再次生成'}
         </button>
-      </aside>
+        <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(props.revisionPath)}>
+          定位回修清单
+        </button>
+        <button type="button" className="ghost-button" onClick={() => props.onRevealProjectPath(props.candidatePath)}>
+          定位候选稿
+        </button>
+      </div>
     </section>
   )
 }
 
 export function ManuscriptPanel(props: WorkspaceProps) {
+  const [readingMode, setReadingMode] = useState(false)
+  const [editorFontSize, setEditorFontSize] = useState(() => {
+    const saved = window.localStorage.getItem('olienta:manuscript-font-size')
+    const parsed = saved ? Number(saved) : 17
+    return Number.isFinite(parsed) ? Math.max(14, Math.min(24, parsed)) : 17
+  })
   const paragraphCount = countParagraphs(props.manuscript)
-  const candidateUnits = estimateTextUnits(props.candidate)
+  const draftItems = buildChapterDraftItems(props)
+  const selectedChapterIndex = props.chapters.findIndex((chapter) => chapter.id === props.selectedChapterId)
+  const previousChapter = selectedChapterIndex > 0 ? props.chapters[selectedChapterIndex - 1] : null
+  const nextChapter = selectedChapterIndex >= 0 && selectedChapterIndex < props.chapters.length - 1
+    ? props.chapters[selectedChapterIndex + 1]
+    : null
+
+  useEffect(() => {
+    window.localStorage.setItem('olienta:manuscript-font-size', String(editorFontSize))
+  }, [editorFontSize])
 
   return (
     <section className="confirmation-grid">
       <div className="confirmation-main">
-        <section className="chapter-chain">
-          <div className="chapter-chain-heading">
-            <div>
-              <h2>已确认正文</h2>
-              <p>保存本章会记录作者确认，并刷新后续记忆链路。</p>
+        <section className="manuscript-top-strip">
+          <section className="chapter-chain">
+            <div className="chapter-chain-heading">
+              <div>
+                <h2>本章草稿列表</h2>
+                <p>保存确认后才成为正文；未确认内容只作为草稿版本保留。</p>
+              </div>
+              <span className={`save-state-pill ${saveStateTone(props.saveState)}`}>{props.saveState}</span>
             </div>
-            <span>{props.saveState}</span>
-          </div>
-          <div className="chapter-chain-steps">
-            <article className="chapter-chain-step confirmed">
-              <div><strong>章节文件</strong><span>{props.chapterPath}</span></div>
-              <p>普通 Markdown 文件仍是已确认正文的真实来源。</p>
-            </article>
-            <article className="chapter-chain-step draft">
-              <div><strong>候选稿可用</strong><span>{candidateUnits}</span></div>
-              <p>候选稿只能从草稿箱追加或替换，不会静默进入正文。</p>
-            </article>
-            <article className="chapter-chain-step active">
-              <div><strong>事实库</strong><span>{props.confirmedFactsPath}</span></div>
-              <p>大幅编辑后可重扫事实库，从已保存正文刷新确认事实。</p>
-            </article>
-          </div>
+            <div className="chapter-draft-list">
+              {draftItems.map((item) => (
+                <button
+                  type="button"
+                  className={`chapter-draft-link ${item.kind}`}
+                  key={item.key}
+                  onClick={item.onClick}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="review-card manuscript-status-card">
+            <div className="panel-heading">
+              <h2>章节状态</h2>
+              <span>{formatChapterState(props.currentChapter.state)}</span>
+            </div>
+            <div className="health-strip compact">
+              <article><span>字数</span><strong>{props.manuscriptWordCount}</strong></article>
+              <article><span>文本单位</span><strong>{estimateTextUnits(props.manuscript)}</strong></article>
+              <article><span>段落</span><strong>{paragraphCount}</strong></article>
+            </div>
+          </section>
+
+          <section className="review-card author-confirm-card">
+            <div className="panel-heading">
+              <h2>作者确认</h2>
+            </div>
+            <p className="empty-note">确认后，本章当前内容会成为正式正文。</p>
+            <div className="editor-actions">
+              <button type="button" className="primary-button" onClick={props.onSaveChapter}>保存确认正文</button>
+            </div>
+          </section>
+
+          <section className="review-card manuscript-export-card">
+            <div className="panel-heading">
+              <h2>导出当前章</h2>
+              <span>{props.lastExportedPath || '尚未导出'}</span>
+            </div>
+            <div className="editor-actions">
+              <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>MD</button>
+              <button type="button" className="ghost-button" onClick={() => props.onExportProject('docx', 'chapter')}>DOCX</button>
+            </div>
+          </section>
         </section>
 
         <MarkdownDocument
@@ -257,66 +665,53 @@ export function ManuscriptPanel(props: WorkspaceProps) {
           onChange={props.onChangeManuscript}
           onSave={props.onSaveChapter}
           onSelectionChange={props.onChangeManuscriptSelection}
+          restoreSelection={props.manuscriptRestoreSelection}
+          readOnly={props.isProjectReadOnly}
+          viewMode={readingMode ? 'read' : 'edit'}
+          fontSize={editorFontSize}
+          leadingActions={
+            <>
+              <button
+                type="button"
+                className="ghost-button compact-button"
+                disabled={!previousChapter}
+                onClick={() => previousChapter && props.onSelectChapter(previousChapter.id)}
+              >
+                上一章
+              </button>
+              <button
+                type="button"
+                className="ghost-button compact-button"
+                disabled={!nextChapter}
+                onClick={() => nextChapter && props.onSelectChapter(nextChapter.id)}
+              >
+                下一章
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setReadingMode((value) => !value)}>
+                {readingMode ? '编辑模式' : '阅读模式'}
+              </button>
+              <label className="inline-control font-size-control">
+                <span>字号</span>
+                <input
+                  type="range"
+                  min="14"
+                  max="24"
+                  value={editorFontSize}
+                  onChange={(event) => setEditorFontSize(Number(event.currentTarget.value))}
+                />
+                <strong>{editorFontSize}px</strong>
+              </label>
+            </>
+          }
           actions={
             <>
-              <button type="button" className="ghost-button" onClick={props.onToggleFocusMode}>纯写作</button>
-              <button type="button" className="ghost-button" onClick={props.onRescanFacts}>重扫事实</button>
-              <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>导出 MD</button>
-              <button type="button" className="ghost-button" onClick={() => props.onExportProject('txt', 'chapter')}>导出 TXT</button>
+              <button type="button" className="ghost-button" onClick={props.onToggleFocusMode}>专注模式</button>
+              {!props.isProjectReadOnly && <button type="button" className="ghost-button" onClick={props.onImportChapterMarkdown}>导入 MD</button>}
+              {!props.isProjectReadOnly && <button type="button" className="ghost-button" onClick={props.onGenerateBlueprintFromManuscript}>由正文生成蓝图</button>}
             </>
           }
         />
       </div>
-
-      <aside className="confirmation-side">
-        <section className="review-card">
-          <div className="panel-heading">
-            <h2>章节状态</h2>
-            <span>{props.currentChapter.state ?? 'draft'}</span>
-          </div>
-          <div className="health-strip">
-            <article><span>Words</span><strong>{props.manuscriptWordCount}</strong></article>
-            <article><span>Units</span><strong>{estimateTextUnits(props.manuscript)}</strong></article>
-            <article><span>Paragraphs</span><strong>{paragraphCount}</strong></article>
-          </div>
-        </section>
-
-        <section className="review-card">
-          <div className="panel-heading">
-            <h2>作者确认</h2>
-            <span>本地日志</span>
-          </div>
-          <p className="empty-note">保存会写入确认摘要和事件记录；除非明确采用候选稿，否则 AI 文本不会进入正文。</p>
-          <div className="editor-actions">
-            <button type="button" className="primary-button" onClick={props.onSaveChapter}>保存已确认正文</button>
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('facts/author-confirmation.md')}>打开日志</button>
-          </div>
-        </section>
-
-        <section className="review-card">
-          <div className="panel-heading">
-            <h2>Memory</h2>
-            <span>{props.openLoopsPath}</span>
-          </div>
-          <p className="empty-note">事实和伏笔都保存为普通 Markdown 文件，作者可以直接查看和编辑。</p>
-          <div className="editor-actions">
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.confirmedFactsPath)}>事实库</button>
-            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile(props.openLoopsPath)}>伏笔</button>
-          </div>
-        </section>
-
-        <section className="review-card">
-          <div className="panel-heading">
-            <h2>导出当前章</h2>
-            <span>{props.lastExportedPath || '尚未导出'}</span>
-          </div>
-          <div className="editor-actions">
-            <button type="button" className="ghost-button" onClick={() => props.onExportProject('markdown', 'chapter')}>MD</button>
-            <button type="button" className="ghost-button" onClick={() => props.onExportProject('txt', 'chapter')}>TXT</button>
-            <button type="button" className="ghost-button" onClick={() => props.onExportProject('docx', 'chapter')}>DOCX</button>
-          </div>
-        </section>
-      </aside>
     </section>
   )
 }
@@ -328,65 +723,39 @@ export function MarkdownDocument(props: {
   onChange: (value: string) => void
   onSave: () => void
   onSelectionChange?: (start: number, end: number) => void
+  restoreSelection?: { start: number; end: number } | null
+  readOnly?: boolean
+  viewMode?: 'edit' | 'read'
+  fontSize?: number
+  hideReadOnlyBadge?: boolean
+  hideSaveButton?: boolean
+  hidePath?: boolean
+  leadingActions?: ReactNode
   actions?: ReactNode
 }) {
-  const [mode, setMode] = useState<'edit' | 'preview'>('edit')
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const editorRef = useRef<MarkdownEditorKernelHandle | null>(null)
   const stats = getMarkdownStats(props.value)
-
-  function updateValue(nextValue: string, selectionStart?: number, selectionEnd?: number) {
-    props.onChange(nextValue)
-    if (selectionStart === undefined || selectionEnd === undefined) return
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-      textareaRef.current?.setSelectionRange(selectionStart, selectionEnd)
-    })
-  }
+  const renderedMode = props.readOnly || props.viewMode === 'read'
+  const isManuscriptDocument = props.path.startsWith('manuscript/chapters/')
+  const editorStyle = { '--editor-font-size': `${props.fontSize ?? 17}px` } as CSSProperties
 
   function applyAction(action: MarkdownAction) {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    const next = applyMarkdownAction(props.value, textarea.selectionStart, textarea.selectionEnd, action)
-    updateValue(next.value, next.selectionStart, next.selectionEnd)
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const action = markdownActionForKey(event)
-    if (!action) return
-    event.preventDefault()
-    applyAction(action)
-  }
-
-  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const html = event.clipboardData.getData('text/html')
-    const text = event.clipboardData.getData('text/plain')
-    const cleaned = html ? htmlToMarkdown(html) : cleanPastedText(text)
-    if (!cleaned) return
-    event.preventDefault()
-    const textarea = textareaRef.current
-    if (!textarea) return
-    const next = replaceSelection(props.value, textarea.selectionStart, textarea.selectionEnd, cleaned)
-    updateValue(next.value, next.selectionStart, next.selectionEnd)
-  }
-
-  function reportSelection(textarea: HTMLTextAreaElement) {
-    props.onSelectionChange?.(textarea.selectionStart, textarea.selectionEnd)
+    editorRef.current?.applyAction(action)
   }
 
   return (
     <section className="editor-card module-document-panel">
       <div className="card-heading">
-        <div><h2>{props.title}</h2><p>{props.path}</p></div>
+        <div><h2>{props.title}</h2>{!props.hidePath && <p>{props.path}</p>}</div>
         <div className="editor-actions">
-          <button className="ghost-button" onClick={() => setMode(mode === 'edit' ? 'preview' : 'edit')}>
-            {mode === 'edit' ? '预览' : '编辑'}
-          </button>
+          {props.readOnly && !props.hideReadOnlyBadge && <span className="status-pill">只读</span>}
+          {props.leadingActions}
           {props.actions}
-          <button className="primary-button" onClick={props.onSave}>保存</button>
+          {!props.readOnly && !props.hideSaveButton && <button className="primary-button" onClick={props.onSave}>保存</button>}
         </div>
       </div>
-      {mode === 'edit' && (
-        <div className="markdown-editor-shell">
+      {!renderedMode && (
+        <div className="markdown-editor-shell" style={editorStyle}>
           <div className="markdown-toolbar" aria-label="Markdown tools">
             {MARKDOWN_ACTIONS.map((tool) => (
               <button
@@ -400,16 +769,15 @@ export function MarkdownDocument(props: {
             ))}
             <span className="shortcut-hint">Ctrl+B / Ctrl+` / Tab</span>
           </div>
-          <textarea
-            ref={textareaRef}
+          <MarkdownEditorKernel
+            ref={editorRef}
             className="markdown-preview source"
+            ariaLabel={`${props.title} Markdown 编辑器`}
             value={props.value}
-            onChange={(event) => props.onChange(event.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onSelect={(event) => reportSelection(event.currentTarget)}
-            onClick={(event) => reportSelection(event.currentTarget)}
-            onKeyUp={(event) => reportSelection(event.currentTarget)}
+            onChange={props.onChange}
+            onSelectionChange={props.onSelectionChange}
+            restoreSelection={props.restoreSelection}
+            cleanPaste={(html, text) => html ? htmlToMarkdown(html) : cleanPastedText(text)}
           />
           <div className="markdown-editor-meta">
             <span>{stats.lines} 行</span>
@@ -418,13 +786,92 @@ export function MarkdownDocument(props: {
           </div>
         </div>
       )}
-      {mode === 'preview' && (
-        <div className="markdown-rendered local-markdown-rendered">
+      {renderedMode && (
+        <div
+          className={`markdown-rendered local-markdown-rendered ${isManuscriptDocument ? 'manuscript-rendered' : ''}`}
+          style={editorStyle}
+        >
           {renderMarkdownPreview(props.value)}
         </div>
       )}
     </section>
   )
+}
+
+function buildChapterDraftItems(props: WorkspaceProps) {
+  const baseTitle = formatChapterDisplayTitle(props.selectedChapterId, props.currentChapter.title)
+  const items: Array<{
+    key: string
+    title: string
+    label: string
+    kind: 'confirmed' | 'draft'
+    onClick: () => void
+  }> = [
+    {
+      key: 'confirmed-manuscript',
+      title: baseTitle,
+      label: '正文',
+      kind: 'confirmed',
+      onClick: () => undefined,
+    },
+  ]
+
+  const historyItems = props.candidateHistory.slice().reverse()
+  historyItems.forEach((item, index) => {
+    items.push({
+      key: item.relative_path,
+      title: `${baseTitle}${index + 1}`,
+      label: '草稿',
+      kind: 'draft',
+      onClick: () => {
+        props.onSelectView('draft-box')
+        props.onLoadCandidateHistory(item.relative_path)
+      },
+    })
+  })
+
+  if (props.candidate.trim()) {
+    items.push({
+      key: 'current-candidate',
+      title: `${baseTitle}${historyItems.length + 1}`,
+      label: '草稿',
+      kind: 'draft',
+      onClick: () => props.onSelectView('draft-box'),
+    })
+  }
+
+  return items
+}
+
+function formatChapterDisplayTitle(chapterId: string, rawTitle: string) {
+  const numeric = Number.parseInt(chapterId, 10)
+  const chapterLabel = Number.isFinite(numeric)
+    ? `第${numeric.toString().padStart(2, '0')}章`
+    : `第${chapterId}章`
+  const cleanedTitle = rawTitle
+    .replace(/^第\s*\d+\s*章[：:\s-]*/u, '')
+    .replace(/^第[零一二三四五六七八九十百千万〇两]+章[：:\s-]*/u, '')
+    .trim()
+  return cleanedTitle ? `${chapterLabel} ${cleanedTitle}` : chapterLabel
+}
+
+function formatChapterState(state: string | undefined) {
+  const normalized = (state ?? '').trim().toLowerCase()
+  const labels: Record<string, string> = {
+    confirmed: '已确认',
+    draft: '草稿',
+    empty: '空白',
+    missing: '未建立',
+  }
+  return labels[normalized] ?? (state || '草稿')
+}
+
+function saveStateTone(state: string) {
+  if (/失败|failed|error/i.test(state)) return 'failed'
+  if (/未保存|修改|unsaved|dirty/i.test(state)) return 'dirty'
+  if (/正在|saving|working/i.test(state)) return 'saving'
+  if (/已保存|已读取|saved|ready/i.test(state)) return 'saved'
+  return 'idle'
 }
 
 const MARKDOWN_ACTIONS: Array<{ action: MarkdownAction; label: string; title: string }> = [
@@ -562,13 +1009,80 @@ function getMarkdownStats(value: string) {
     lines: value ? value.split(/\r\n?|\n/).length : 0,
     paragraphs: countParagraphs(value),
     units: estimateTextUnits(value),
+    chars: value.length,
+    bytes: new TextEncoder().encode(value).length,
   }
 }
 
 export function ChapterList(props: WorkspaceProps) {
+  const [fulfillmentByChapter, setFulfillmentByChapter] = useState<Record<string, ContractFulfillmentSummary | null>>({})
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'risk' | 'missing' | 'ok'>('all')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadChapterFulfillmentBadges() {
+      if (!props.project) {
+        setFulfillmentByChapter({})
+        return
+      }
+
+      const entries = await Promise.all(
+        props.chapters.map(async (chapter) => {
+          try {
+            const loaded = await tauriApi.loadProjectMarkdownFile(
+              props.project!.root_path,
+              `story-contracts/fulfillment/${chapter.id}.json`,
+            )
+            return [chapter.id, JSON.parse(loaded.content) as ContractFulfillmentSummary] as const
+          } catch {
+            return [chapter.id, null] as const
+          }
+        }),
+      )
+
+      if (!cancelled) {
+        setFulfillmentByChapter(Object.fromEntries(entries))
+      }
+    }
+
+    void loadChapterFulfillmentBadges()
+    return () => {
+      cancelled = true
+    }
+  }, [props.project, props.chapters])
+
+  const chapterRows = props.chapters.map((chapter) => {
+    const fulfillment = fulfillmentByChapter[chapter.id]
+    const badge = chapterFulfillmentBadge(fulfillment)
+    return { chapter, fulfillment, badge }
+  })
+  const visibleChapterRows = chapterRows.filter(({ chapter, fulfillment }) => {
+    if (chapter.id === props.selectedChapterId) return true
+    return chapterMatchesFulfillmentFilter(fulfillmentFilter, fulfillment)
+  })
+
   return (
     <aside className="chapter-list-panel">
-      {props.chapters.map((chapter) => (
+      <div className="chapter-contract-filter">
+        {[
+          ['all', '全部'],
+          ['risk', '有风险'],
+          ['missing', '未生成'],
+          ['ok', '已通过'],
+        ].map(([key, label]) => (
+          <button
+            type="button"
+            className={fulfillmentFilter === key ? 'active' : ''}
+            key={key}
+            onClick={() => setFulfillmentFilter(key as typeof fulfillmentFilter)}
+          >
+            {label}
+          </button>
+        ))}
+        <small>{visibleChapterRows.length} / {props.chapters.length}</small>
+      </div>
+      {visibleChapterRows.map(({ chapter, badge }) => (
         <button
           className={`chapter-list-item ${chapter.id === props.selectedChapterId ? 'active' : ''}`}
           key={chapter.id}
@@ -577,89 +1091,147 @@ export function ChapterList(props: WorkspaceProps) {
           <span>{chapter.id}</span>
           <strong>{chapter.title}</strong>
           <small>{chapter.words} 字</small>
+          <em className={`chapter-contract-badge ${badge.tone}`} title={badge.title}>{badge.label}</em>
         </button>
       ))}
     </aside>
   )
 }
 
+function chapterMatchesFulfillmentFilter(
+  filter: 'all' | 'risk' | 'missing' | 'ok',
+  summary: ContractFulfillmentSummary | null | undefined,
+) {
+  if (filter === 'all') return true
+  if (filter === 'missing') return summary === undefined || summary === null
+  if (!summary) return false
+  const hasRisk = summary.touchedForbiddenCount > 0 || summary.missingRequiredCount > 0
+  if (filter === 'risk') return hasRisk
+  if (filter === 'ok') return !hasRisk
+  return true
+}
+
+function chapterFulfillmentBadge(summary: ContractFulfillmentSummary | null | undefined) {
+  if (summary === undefined || summary === null) {
+    return { tone: 'empty', label: '未生成', title: '保存正文后生成合同履约摘要。' }
+  }
+  if (summary.touchedForbiddenCount > 0) {
+    return { tone: 'danger', label: '禁写风险', title: `触碰禁写项 ${summary.touchedForbiddenCount} 条` }
+  }
+  if (summary.missingRequiredCount > 0) {
+    return { tone: 'warning', label: '缺必须项', title: `缺失必须项 ${summary.missingRequiredCount} 条` }
+  }
+  return { tone: 'ok', label: '已通过', title: `履约得分 ${summary.score}` }
+}
+
 export function FocusMode(props: WorkspaceProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const stats = getMarkdownStats(props.manuscript)
+  const hasCandidateDraft = props.candidate.trim().length > 0
+  const selectedChapterIndex = props.chapters.findIndex((chapter) => chapter.id === props.selectedChapterId)
+  const previousChapter = selectedChapterIndex > 0 ? props.chapters[selectedChapterIndex - 1] : null
+  const nextChapter = selectedChapterIndex >= 0 && selectedChapterIndex < props.chapters.length - 1
+    ? props.chapters[selectedChapterIndex + 1]
+    : null
+  const [focusLayout, setFocusLayout] = useState({
+    chapterId: props.selectedChapterId,
+    splitMode: hasCandidateDraft,
+  })
+  const splitMode = focusLayout.chapterId === props.selectedChapterId
+    ? focusLayout.splitMode
+    : hasCandidateDraft
 
-  function updateValue(nextValue: string, selectionStart?: number, selectionEnd?: number) {
-    props.onChangeManuscript(nextValue)
-    if (selectionStart === undefined || selectionEnd === undefined) return
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-      textareaRef.current?.setSelectionRange(selectionStart, selectionEnd)
+  const setCurrentSplitMode = useCallback((next: boolean | ((current: boolean) => boolean)) => {
+    setFocusLayout((current) => {
+      const currentSplit = current.chapterId === props.selectedChapterId ? current.splitMode : hasCandidateDraft
+      return {
+        chapterId: props.selectedChapterId,
+        splitMode: typeof next === 'function' ? next(currentSplit) : next,
+      }
     })
-  }
+  }, [hasCandidateDraft, props.selectedChapterId])
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const action = markdownActionForKey(event)
-    if (!action) return
-    event.preventDefault()
-    const next = applyMarkdownAction(
-      props.manuscript,
-      event.currentTarget.selectionStart,
-      event.currentTarget.selectionEnd,
-      action,
-    )
-    updateValue(next.value, next.selectionStart, next.selectionEnd)
-  }
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      if (splitMode) {
+        setCurrentSplitMode(false)
+        return
+      }
+      props.onToggleFocusMode()
+    }
 
-  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const html = event.clipboardData.getData('text/html')
-    const text = event.clipboardData.getData('text/plain')
-    const cleaned = html ? htmlToMarkdown(html) : cleanPastedText(text)
-    if (!cleaned) return
-    event.preventDefault()
-    const next = replaceSelection(
-      props.manuscript,
-      event.currentTarget.selectionStart,
-      event.currentTarget.selectionEnd,
-      cleaned,
-    )
-    updateValue(next.value, next.selectionStart, next.selectionEnd)
-  }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [props, setCurrentSplitMode, splitMode])
 
-  function reportSelection(textarea: HTMLTextAreaElement) {
-    props.onChangeManuscriptSelection(textarea.selectionStart, textarea.selectionEnd)
+  function exitFocusMode() {
+    if (splitMode) {
+      setCurrentSplitMode(false)
+      return
+    }
+    props.onToggleFocusMode()
   }
 
   return (
-    <section className="focus-mode">
-      <div className="focus-topbar">
-        <strong>{props.currentChapter.title}</strong>
-        <span>{props.saveState}</span>
-        <button onClick={props.onSaveChapter}>保存</button>
+    <section className={`focus-writing-mode ${splitMode ? 'split' : 'single'}`}>
+      <div className="focus-writing-stage">
+        <div className="focus-writing-pane manuscript-pane">
+          <h1>{props.currentChapter.title}</h1>
+          <MarkdownEditorKernel
+            className="focus-editor"
+            ariaLabel="专注模式 Markdown 编辑器"
+            value={props.manuscript}
+            onChange={props.onChangeManuscript}
+            onSelectionChange={props.onChangeManuscriptSelection}
+            restoreSelection={props.manuscriptRestoreSelection}
+            cleanPaste={(html, text) => html ? htmlToMarkdown(html) : cleanPastedText(text)}
+          />
+        </div>
+        {splitMode && (
+          <aside className="focus-writing-pane candidate-pane" aria-label="候选稿参考">
+            <h1>候选稿参考</h1>
+            <div className="focus-candidate-preview">
+              {renderMarkdownPreview(props.candidate)}
+            </div>
+          </aside>
+        )}
       </div>
-      <textarea
-        ref={textareaRef}
-        value={props.manuscript}
-        onChange={(event) => props.onChangeManuscript(event.target.value)}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        onSelect={(event) => reportSelection(event.currentTarget)}
-        onClick={(event) => reportSelection(event.currentTarget)}
-        onKeyUp={(event) => reportSelection(event.currentTarget)}
-      />
       <div className="focus-meta">
-        <span>{stats.lines} 行</span>
+        <button
+          type="button"
+          disabled={!previousChapter}
+          onClick={() => previousChapter && props.onSelectChapter(previousChapter.id)}
+        >
+          上一章
+        </button>
+        <button
+          type="button"
+          disabled={!nextChapter}
+          onClick={() => nextChapter && props.onSelectChapter(nextChapter.id)}
+        >
+          下一章
+        </button>
+        {hasCandidateDraft && (
+          <button type="button" onClick={() => setCurrentSplitMode((current) => !current)}>
+            {splitMode ? '单屏写作' : '双屏对照'}
+          </button>
+        )}
+        <button type="button" className="focus-exit-button" onClick={exitFocusMode}>{splitMode ? '收起对照' : '退出专注'}</button>
         <span>{stats.paragraphs} 段</span>
-        <span>{stats.units} 字/词</span>
+        <span>{stats.units} 字</span>
+        <span>{stats.lines} 行</span>
       </div>
     </section>
   )
 }
 
-function groupCandidateWarnings(warnings: string[]): ReviewGroup[] {
-  const groups = REVIEW_GROUPS.map((group) => ({ ...group, items: [] as string[] }))
+function groupCandidateReviewIssues(issues: CandidateReviewIssue[]): ReviewGroup[] {
+  const groups = REVIEW_GROUPS.map((group) => ({ ...group, items: [] as CandidateReviewIssue[] }))
 
-  for (const warning of warnings) {
-    const group = groups.find((item) => item.match(warning)) ?? groups[groups.length - 1]
-    group.items.push(warning)
+  for (const issue of issues) {
+    const group = groups.find((item) => item.match(issue)) ?? groups[groups.length - 1]
+    group.items.push(issue)
   }
 
   return groups
@@ -667,7 +1239,91 @@ function groupCandidateWarnings(warnings: string[]): ReviewGroup[] {
     .map(({ key, title, tone, items }) => ({ key, title, tone, items }))
 }
 
-function DiffPreviewList(props: { items: string[]; emptyText: string }) {
+function issueFromWarning(description: string): CandidateReviewIssue {
+  return {
+    severity: description.includes('禁写') || description.includes('时间线') ? 'high' : 'medium',
+    category: description.includes('回修目标') ? 'revision' : description.includes('时间线') ? 'timeline' : description.includes('事实') ? 'fact' : 'other',
+    location: '候选稿',
+    description,
+    evidence: description,
+    fix_hint: '按审查提醒修改候选稿后重新保存。',
+    blocking: description.includes('禁写') || description.includes('时间线'),
+  }
+}
+
+function formatReviewSeverity(severity: string) {
+  const labels: Record<string, string> = {
+    critical: '严重',
+    high: '高',
+    medium: '中',
+    low: '低',
+  }
+  return labels[severity] ?? severity
+}
+
+function formatReviewCategory(category: string) {
+  const labels: Record<string, string> = {
+    timeline: '时间线',
+    blueprint: '蓝图',
+    setting: '设定',
+    fact: '事实',
+    character: '角色',
+    context: '上下文',
+    revision: '回修',
+    continuity: '连续性',
+    generation: '生成',
+    ai_flavor: 'AI味',
+    other: '其他',
+  }
+  return labels[category] ?? category
+}
+
+function TimelineReviewPanel(props: {
+  eventsPath: string
+  milestonesPath: string
+  issues: CandidateReviewIssue[]
+  onRevealProjectPath: (relativePath: string) => void
+}) {
+  const sourceCounts = props.issues.reduce<Record<string, number>>((counts, issue) => {
+    const source = issue.location.match(/([^（）()]+\.md)/)?.[1]
+    if (!source) return counts
+    counts[source] = (counts[source] ?? 0) + 1
+    return counts
+  }, {})
+
+  return (
+    <article className="timeline-review-card">
+      <div className="candidate-review-group-head">
+        <strong>Timeline Pro 冲突来源</strong>
+        <span>{props.issues.length}</span>
+      </div>
+      <div className="timeline-review-source-grid">
+        {[props.eventsPath, props.milestonesPath].map((path) => (
+          <button
+            type="button"
+            className="timeline-review-source"
+            key={path}
+            onClick={() => props.onRevealProjectPath(path)}
+          >
+            <strong>{path}</strong>
+            <span>{sourceCounts[path] ?? 0} 条命中</span>
+          </button>
+        ))}
+      </div>
+      <p>
+        时间线 issue 已带来源文件和行号。先打开对应文件确认边界，再决定候选稿是保留、改写还是推迟到后续章节。
+      </p>
+    </article>
+  )
+}
+
+function DiffPreviewList(props: {
+  items: string[]
+  emptyText: string
+  onLocate?: (item: string) => void
+  onInsert?: (item: string) => void
+  onAppend?: (item: string) => void
+}) {
   if (props.items.length === 0) {
     return <p className="empty-note">{props.emptyText}</p>
   }
@@ -679,7 +1335,22 @@ function DiffPreviewList(props: { items: string[]; emptyText: string }) {
     <>
       <ul>
         {previewItems.map((item) => (
-          <li key={item}>{trimDiffParagraph(item)}</li>
+          <li className="diff-preview-item" key={item}>
+            <span>{trimDiffParagraph(item)}</span>
+            {(props.onLocate || props.onInsert || props.onAppend) && (
+              <span className="diff-preview-actions">
+                {props.onLocate && (
+                  <button type="button" className="ghost-button" onClick={() => props.onLocate?.(item)}>定位</button>
+                )}
+                {props.onInsert && (
+                  <button type="button" className="ghost-button" onClick={() => props.onInsert?.(item)}>插入</button>
+                )}
+                {props.onAppend && (
+                  <button type="button" className="ghost-button" onClick={() => props.onAppend?.(item)}>追加</button>
+                )}
+              </span>
+            )}
+          </li>
         ))}
       </ul>
       {hiddenCount > 0 && <p className="diff-more">还有 {hiddenCount} 个段落未展开。</p>}
@@ -687,13 +1358,35 @@ function DiffPreviewList(props: { items: string[]; emptyText: string }) {
   )
 }
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  return `${Math.round(bytes / 1024)} KB`
-}
-
 function trimDiffParagraph(paragraph: string) {
   const compact = paragraph.replace(/\s+/g, ' ').trim()
   if (compact.length <= 140) return compact
   return `${compact.slice(0, 140)}...`
+}
+
+function paragraphPairKey(candidate: string, manuscript: string) {
+  return `${candidate}\n---\n${manuscript}`
+}
+
+function formatSelectionLabel(selection: { start: number; end: number } | null, manuscriptLength: number) {
+  if (!selection) return `未记录光标，将插入正文末尾（${manuscriptLength}）`
+  const start = Math.max(0, Math.min(selection.start, manuscriptLength))
+  const end = Math.max(start, Math.min(selection.end, manuscriptLength))
+  if (start === end) return `正文光标 ${start}`
+  return `正文选区 ${start}-${end}，插入时会替换选区`
+}
+
+function formatCandidateSelectionLabel(selection: { start: number; end: number } | null, candidate: string) {
+  const clamped = clampSelection(selection, candidate.length)
+  if (!clamped || clamped.start === clamped.end || !candidate.slice(clamped.start, clamped.end).trim()) {
+    return `整份候选稿（${candidate.length} 字符）`
+  }
+  return `候选稿选区 ${clamped.start}-${clamped.end}（${clamped.end - clamped.start} 字符）`
+}
+
+function clampSelection(selection: { start: number; end: number } | null, length: number) {
+  if (!selection) return null
+  const start = Math.max(0, Math.min(selection.start, length))
+  const end = Math.max(start, Math.min(selection.end, length))
+  return { start, end }
 }

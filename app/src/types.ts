@@ -28,9 +28,44 @@ export type ChapterSummary = {
   state: string
 }
 
+export type VolumeInfo = {
+  id: string
+  title: string
+  startChapter: number
+  endChapter: number
+  summary: string
+}
+
+export type ContractFulfillmentSummary = {
+  chapterId: string
+  contractPath: string
+  manuscriptPath: string
+  markdownPath: string
+  jsonPath: string
+  revisionPath: string
+  requiredTotal: number
+  fulfilledRequiredCount: number
+  missingRequiredCount: number
+  touchedForbiddenCount: number
+  referencedFactCount: number
+  score: number
+  fulfilledRequired: string[]
+  missingRequired: string[]
+  touchedForbidden: string[]
+  referencedFacts: string[]
+}
+
 export type ProjectFileDocument = {
   relative_path: string
   content: string
+}
+
+export type CandidateFactAdoptionResult = {
+  draft_path: string
+  confirmed_facts: ProjectFileDocument
+  adopted_count: number
+  skipped_count: number
+  classified_paths: string[]
 }
 
 export type ImportedReferenceFile = {
@@ -45,6 +80,12 @@ export type ImportReferenceBatchResult = {
   imported_files: ImportedReferenceFile[]
 }
 
+export type DeconstructionImportResult = {
+  reference: ProjectFileDocument
+  deconstruction_path: string
+  skill_candidate_path: string
+}
+
 export type WritingBrief = {
   chapter_id: string
   relative_path: string
@@ -56,8 +97,65 @@ export type CandidateDraft = {
   relative_path: string
   writing_brief_path: string
   review_path: string
+  fact_draft_path: string
+  model_call_log_entry_id?: string
   content: string
   warnings: string[]
+  review_issues: CandidateReviewIssue[]
+}
+
+export type AiChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type AiChatContextItem = {
+  label: string
+  path: string
+  content: string
+}
+
+export type AiChatInput = {
+  rootPath: string
+  chapterId?: string
+  contextKind?: string
+  activeView?: ViewKey
+  requestId?: string
+  clientContext?: AiChatContextItem[]
+  messages: AiChatMessage[]
+}
+
+export type AiChatResult = {
+  content: string
+  provider: string
+  model: string
+  usedRemoteModel: boolean
+  logEntryId?: string
+  contextSnapshotPath?: string
+  warnings?: string[]
+}
+
+export type CandidateReviewIssue = {
+  severity: 'critical' | 'high' | 'medium' | 'low' | string
+  category:
+    | 'continuity'
+    | 'setting'
+    | 'character'
+    | 'timeline'
+    | 'ai_flavor'
+    | 'logic'
+    | 'pacing'
+    | 'blueprint'
+    | 'fact'
+    | 'context'
+    | 'generation'
+    | 'other'
+    | string
+  location: string
+  description: string
+  evidence: string
+  fix_hint: string
+  blocking: boolean
 }
 
 export type ExportInput = {
@@ -73,6 +171,13 @@ export type ProviderTestResult = {
   provider: string
   message: string
   logEntryId?: string
+}
+
+export type ProviderBatchTestResult = {
+  total: number
+  passed: number
+  failed: number
+  results: ProviderTestResult[]
 }
 
 export type RecentProject = {
@@ -157,6 +262,22 @@ export type BlueprintHistorySummary = {
   name: string
   relative_path: string
   bytes: number
+  backup_time_ms?: number
+  candidate_path?: string
+  writing_brief_path?: string
+  revision_path?: string
+  review_path?: string
+  model_call_log_path?: string
+  model_call_log_entry_id?: string
+  adoption_status?: string
+  adoption_mode?: string
+  confirmation_path?: string
+  confirmation_entry_id?: string
+  restored_from_history_path?: string
+  restored_from_confirmation_path?: string
+  restored_from_confirmation_entry_id?: string
+  restored_at_ms?: number
+  manifest_path?: string
 }
 
 export type TaskStatus = 'ready' | 'working' | 'done' | 'error'
@@ -165,6 +286,13 @@ export type TaskItem = {
   id: string
   label: string
   status: TaskStatus
+}
+
+export type TaskLogItem = {
+  id: string
+  message: string
+  status: TaskStatus
+  time: string
 }
 
 export type ModuleKey =
@@ -191,17 +319,20 @@ export type ModuleSubViewKey =
   | 'tasks-current'
   | 'tasks-history'
   | 'logs-author-confirmation'
+  | 'logs-confirmations'
   | 'logs-system-events'
   | 'model-providers'
   | 'model-call-records'
   | 'model-tests'
 
 export type ViewKey =
+  | 'continue-writing'
   | 'novel-settings'
   | 'story-premise'
   | 'characters'
   | 'world'
   | 'plot-outline'
+  | 'important-scenes'
   | 'timeline'
   | 'facts'
   | 'ai-providers'

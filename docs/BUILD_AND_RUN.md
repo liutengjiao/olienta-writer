@@ -69,22 +69,24 @@ cargo check
 
 ## Desktop Build
 
-Use a separate target directory to avoid Windows file-lock issues in the default `target` folder:
+Build artifacts and software-level config are kept under `D:\windsurf\olienta` for local release work:
 
 ```powershell
 cd D:\windsurf\olienta\app
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 $env:CARGO_BUILD_JOBS = "1"
-$env:CARGO_TARGET_DIR = "C:\tmp\olienta-tauri-target"
+$env:OLIENTA_CARGO_TARGET_DIR = "D:\windsurf\olienta\app\src-tauri\target"
+$env:CARGO_TARGET_DIR = $env:OLIENTA_CARGO_TARGET_DIR
+$env:OLIENTA_CONFIG_DIR = "D:\windsurf\olienta\.olienta-app-config"
 npm run desktop:build
 ```
 
 ## Current Artifacts
 
 ```text
-C:\tmp\olienta-tauri-target\release\olienta-writing-platform.exe
-C:\tmp\olienta-tauri-target\release\bundle\msi\Olienta Writer_0.1.0_x64_en-US.msi
-C:\tmp\olienta-tauri-target\release\bundle\nsis\Olienta Writer_0.1.0_x64-setup.exe
+D:\windsurf\olienta\app\src-tauri\target\release\olienta-writing-platform.exe
+D:\windsurf\olienta\app\src-tauri\target\release\bundle\msi\Olienta Writer_0.1.0_x64_en-US.msi
+D:\windsurf\olienta\app\src-tauri\target\release\bundle\nsis\Olienta Writer_0.1.0_x64-setup.exe
 ```
 
 
@@ -94,7 +96,9 @@ C:\tmp\olienta-tauri-target\release\bundle\nsis\Olienta Writer_0.1.0_x64-setup.e
 cd D:\windsurf\olienta\app\src-tauri
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 $env:CARGO_BUILD_JOBS = "1"
-$env:CARGO_TARGET_DIR = "C:\tmp\olienta-tauri-target"
+$env:OLIENTA_CARGO_TARGET_DIR = "D:\windsurf\olienta\app\src-tauri\target"
+$env:CARGO_TARGET_DIR = $env:OLIENTA_CARGO_TARGET_DIR
+$env:OLIENTA_CONFIG_DIR = "D:\windsurf\olienta\.olienta-app-config"
 cargo test smoke_tests -- --nocapture
 ```
 

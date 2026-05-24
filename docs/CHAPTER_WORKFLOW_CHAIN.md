@@ -10,7 +10,9 @@ Olienta 的核心不是让 AI 直接写正文，而是让每一章经过清晰�
 
 ## 页面显示
 
-章节蓝图、草稿箱和正文页面顶部会显示本章链路：
+打开项目后默认进入“项目结构 / 继续写”。继续写页展示当前章的链路状态，并提供进入章节蓝图、候选稿和正文的快捷操作。
+
+章节蓝图、正文草稿和正文页面顶部会显示本章链路：
 
 - 章节蓝图：`blueprints/chapters/{章节号}.md`
 - 写作任务书：`tasks/writing-briefs/{章节号}.md`
@@ -35,7 +37,7 @@ Olienta 的核心不是让 AI 直接写正文，而是让每一章经过清晰�
 以下动作会写入 `tasks/history.jsonl`：
 
 - `blueprint_saved`：蓝图已保存，并触发后续蓝图覆盖策略。
-- `writing_brief_composed`：任务书已装配。
+- `writing_brief_composed`：本章写作要求已生成。底层文件仍是 `tasks/writing-briefs/{章节号}.md`。
 - `candidate_draft_generated`：候选稿已生成。
 - `candidate_reviewed`：候选稿已审查。
 - `candidate_adopted`：候选稿已采用为正文。

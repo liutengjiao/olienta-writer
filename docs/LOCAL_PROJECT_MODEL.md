@@ -35,7 +35,11 @@ project.json
 
 保存项目名、语言、总章数、每章目标字数、模板等基础信息。它是普通 JSON，不保存 API Key。
 
-## 正文与草稿
+## 正文（正位与草稿版本）
+
+作者视角不再把“草稿箱”和“正文”做成两个并列目录。统一规则是：`正文/第一章.md` 是作者确认后的正位文件，`正文/第一章1.md`、`正文/第一章2.md` 是 AI 候选稿、手工草稿或历史版本。
+
+软件内部仍保留候选稿审查、历史版本和确认记录，用于安全链路；但界面和作者可见目录应把它们理解为“正文草稿版本”，而不是另一个写作主线。
 
 ```text
 manuscript/
@@ -56,6 +60,15 @@ manuscript/
 - `manuscript/candidates/reviews/`：候选稿冲突审查报告。
 - `manuscript/author-input/`：作者本章输入，可长可短，不强制格式。
 
+作者可见同步目录：
+
+```text
+正文/
+  第一章.md
+  第一章1.md
+  第一章2.md
+```
+
 ## 章节蓝图
 
 ```text
@@ -66,7 +79,7 @@ blueprints/
   history/
 ```
 
-蓝图和正文分开。重生成后续蓝图时，默认覆盖后续章节蓝图，但保留历史版本。作者每章正式写作时再确认。
+蓝图和正文分开。再次生成后续蓝图时，默认覆盖后续章节蓝图，但保留历史版本。作者每章正式写作时再确认。
 
 ## 小说设置与故事构架
 
@@ -81,10 +94,11 @@ framework/
 ```
 
 - 小说设置：基础信息、目标受众、结构、视角、总章数、每章字数。
-- 故事前提：这部小说为什么成立。
+- 故事梗概：这部小说讲什么、为什么成立、核心矛盾是什么。
 - 角色图谱：角色关系、欲望、弱点、成长与不可误写边界。
 - 世界观：时代、地点、规则、职业体系、力量体系。
 - 情节大纲：全书结构、阶段、关键转折。
+- 重要场景：必须出现、不能提前出现、需要反复打磨的关键场面。
 - 文风配置：语言风格、禁忌、参考作品。
 
 这些文件都可以作为简单 Markdown 呈现和编辑，不需要复杂表单先行。
@@ -141,7 +155,7 @@ knowledge/
   notes/
 ```
 
-知识库用于保存参考资料、作者笔记、外部素材摘要。第一版先以 Markdown 和文本文件为主，不引入数据库。
+知识库用于保存参考资料、作者笔记、外部素材摘要。当前版本先以 Markdown 和文本文件为主，不引入数据库。
 
 ## 角色模块
 
@@ -204,12 +218,15 @@ models/
   README.md
 ```
 
-- `skills/selected/`：第一版只支持导入和选择 Skill 文件。
+- `skills/selected/`：当前版本支持导入、选择、编辑、保存和预览 Skill 文件，但不在 Skill 页打开 AI 助手。
 - `tasks/writing-briefs/`：章节写作任务书，是本地化 Story System 合同。
 - `tasks/history.jsonl`：任务历史，供底部“任务”模块读取。
 - `logs/system-events.jsonl`：系统事件流水。
 - `logs/confirmations/`：候选稿采用为正文后的本章确认摘要。
 - `logs/model-calls/history.md`：候选稿生成、Provider 测试等模型调用记录，不记录 API Key。
+- 事实库是已确认情节的简略索引，主要供 AI 生成和冲突检查使用。
+- Skill 是给 AI 生成准备的写作方法和约束，不是正文资料。
+- AI Provider 配置是软件级设置，不属于小说项目；旧项目内 `.olienta/ai-providers.json` 只作为迁移兼容来源。
 - `models/`：模型调用模块的说明和导出记录。
 
 ## 软件内部配置
@@ -220,6 +237,7 @@ models/
   genre-profile.json
   writing-methodology.json
   timeline-settings.json
+  chat-history.json
   disabled-skills.json
   temporary-skills.json
   tasks.json
@@ -228,9 +246,9 @@ models/
   commits/
 ```
 
-`.olienta/` 只保存软件配置和内部状态。AI Provider 的密钥配置放在这里，不写入日志和导出文件。
+`.olienta/` 只保存软件配置和内部状态。AI Provider 的密钥配置放在这里，不写入日志和导出文件。右侧 AI 助手的对话记录保存到 `.olienta/chat-history.json`，按页面/章节分组，用于恢复讨论上下文；它不参与正式正文确认链。
 
-`.olienta-events/commits/` 保存正文保存等关键动作的轻量提交记录，用于后续版本回溯。
+`.olienta-events/commits/` 保存正文保存等关键动作的轻量提交记录，用于本地审计。
 
 ## 作者确认链
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type {
   ChapterSummary,
   ModuleKey,
@@ -6,17 +6,24 @@ import type {
   ProjectSummary,
   RecentProject,
   ViewKey,
+  VolumeInfo,
 } from '../types'
+import type { Locale, TranslationKey } from '../i18n'
+
+type T = (locale: Locale, key: TranslationKey) => string
 
 type Props = {
   project: ProjectSummary | null
   message: string
   recentProjects: RecentProject[]
   chapters: ChapterSummary[]
+  volumes: VolumeInfo[]
   selectedChapterId: string
   activeModule: ModuleKey
   activeModuleView: ModuleSubViewKey
   activeView: ViewKey
+  locale: Locale
+  t: T
   onSelectRecentProject: (name: string, rootPath: string) => void
   onSelectChapter: (chapterId: string) => void
   onSelectModule: (module: ModuleKey) => void
@@ -24,46 +31,50 @@ type Props = {
   onSelectView: (view: ViewKey) => void
 }
 
-const storyItems: Array<{ key: ViewKey; label: string; icon: string }> = [
-  { key: 'story-premise', label: '故事前提', icon: 'PR' },
-  { key: 'characters', label: '角色图谱', icon: 'CH' },
-  { key: 'world', label: '世界观', icon: 'WD' },
-  { key: 'plot-outline', label: '情节大纲', icon: 'PL' },
-  { key: 'timeline', label: '时间线及里程碑', icon: 'TL' },
+const storyItems: Array<{ key: ViewKey; labelKey: TranslationKey; icon: string }> = [
+  { key: 'story-premise', labelKey: 'panel.storyPremise', icon: 'SP' },
+  { key: 'characters', labelKey: 'panel.characterMap', icon: 'CH' },
+  { key: 'world', labelKey: 'panel.world', icon: 'WD' },
+  { key: 'plot-outline', labelKey: 'panel.plotOutline', icon: 'PL' },
+  { key: 'important-scenes', labelKey: 'panel.importantScenes', icon: 'SC' },
+  { key: 'timeline', labelKey: 'panel.timeline', icon: 'TL' },
 ]
 
-type GroupKey = 'story' | 'blueprint' | 'draft' | 'manuscript'
-type ToolGroupKey = GroupKey | 'tools'
+type GroupKey = 'story' | 'blueprint' | 'manuscript' | 'library'
 
-const railMainItems: Array<{ label: string; icon: string; module: ModuleKey }> = [
-  { label: '首页', icon: 'H', module: 'home' },
-  { label: '项目结构', icon: 'P', module: 'project-structure' },
-  { label: '知识库', icon: 'K', module: 'knowledge' },
-  { label: '角色', icon: 'R', module: 'characters' },
+const railMainItems: Array<{ labelKey: TranslationKey; icon: ReactNode; module: ModuleKey }> = [
+  { labelKey: 'nav.home', icon: <HomeIcon />, module: 'home' },
+  { labelKey: 'nav.project', icon: <ProjectIcon />, module: 'project-structure' },
+  { labelKey: 'nav.knowledge', icon: <KnowledgeIcon />, module: 'knowledge' },
+  { labelKey: 'nav.characters', icon: <CharactersIcon />, module: 'characters' },
 ]
 
-const railBottomItems: Array<{ label: string; icon: string; module: ModuleKey }> = [
-  { label: '任务', icon: 'T', module: 'tasks' },
-  { label: '日志', icon: 'L', module: 'logs' },
-  { label: '模型调用', icon: 'AI', module: 'model-calls' },
+const railBottomItems: Array<{ labelKey: TranslationKey; icon: ReactNode; module: ModuleKey }> = [
+  { labelKey: 'nav.tasks', icon: <TasksIcon />, module: 'tasks' },
+  { labelKey: 'nav.logs', icon: <LogsIcon />, module: 'logs' },
+  { labelKey: 'nav.models', icon: <ModelIcon />, module: 'model-calls' },
 ]
 
 export function ModuleRail({
   activeModule,
+  locale,
   onSelectModule,
+  t,
 }: {
   activeModule: ModuleKey
+  locale: Locale
   onSelectModule: (module: ModuleKey) => void
+  t: T
 }) {
   return (
-    <nav className="module-rail" aria-label="全局导航">
+    <nav className="module-rail" aria-label={t(locale, 'tools.label')}>
       <div className="module-rail-main">
         {railMainItems.map((item) => (
           <RailButton
-            key={item.label}
+            key={item.module}
             active={activeModule === item.module}
             icon={item.icon}
-            label={item.label}
+            label={t(locale, item.labelKey)}
             onClick={() => onSelectModule(item.module)}
           />
         ))}
@@ -71,10 +82,10 @@ export function ModuleRail({
       <div className="module-rail-bottom">
         {railBottomItems.map((item) => (
           <RailButton
-            key={item.label}
+            key={item.module}
             active={activeModule === item.module}
             icon={item.icon}
-            label={item.label}
+            label={t(locale, item.labelKey)}
             onClick={() => onSelectModule(item.module)}
           />
         ))}
@@ -90,7 +101,7 @@ function RailButton({
   onClick,
 }: {
   active: boolean
-  icon: string
+  icon: ReactNode
   label: string
   onClick: () => void
 }) {
@@ -102,9 +113,45 @@ function RailButton({
       title={label}
       aria-label={label}
     >
-      <span>{icon}</span>
+      <span aria-hidden="true">{icon}</span>
     </button>
   )
+}
+
+function RailSvg({ children }: { children: ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  )
+}
+
+function HomeIcon() {
+  return <RailSvg><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10.5V20h13v-9.5" /><path d="M9.5 20v-6h5v6" /></RailSvg>
+}
+
+function ProjectIcon() {
+  return <RailSvg><path d="M4 5h6l2 2h8v12H4z" /><path d="M4 10h16" /></RailSvg>
+}
+
+function KnowledgeIcon() {
+  return <RailSvg><path d="M5 4h10a4 4 0 0 1 4 4v12H8a3 3 0 0 1-3-3z" /><path d="M8 4v13a3 3 0 0 0 3 3" /><path d="M10 8h5" /><path d="M10 12h4" /></RailSvg>
+}
+
+function CharactersIcon() {
+  return <RailSvg><path d="M16 11a4 4 0 1 0-8 0" /><path d="M5 20a7 7 0 0 1 14 0" /><path d="M18 8a3 3 0 0 1 3 3" /><path d="M21 20a5 5 0 0 0-3-4.5" /></RailSvg>
+}
+
+function TasksIcon() {
+  return <RailSvg><path d="M8 6h12" /><path d="M8 12h12" /><path d="M8 18h12" /><path d="m3.5 6 1 1 2-2" /><path d="m3.5 12 1 1 2-2" /><path d="m3.5 18 1 1 2-2" /></RailSvg>
+}
+
+function LogsIcon() {
+  return <RailSvg><path d="M6 4h9l3 3v13H6z" /><path d="M15 4v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></RailSvg>
+}
+
+function ModelIcon() {
+  return <RailSvg><path d="M12 3v4" /><path d="M12 17v4" /><path d="M3 12h4" /><path d="M17 12h4" /><rect x="7" y="7" width="10" height="10" rx="2" /><path d="M10 10h4v4h-4z" /></RailSvg>
 }
 
 export function ProjectPanel({
@@ -112,26 +159,33 @@ export function ProjectPanel({
   message,
   recentProjects,
   chapters,
+  volumes,
   selectedChapterId,
   activeModule,
   activeModuleView,
   activeView,
+  locale,
+  t,
   onSelectRecentProject,
   onSelectChapter,
   onSelectModule,
   onSelectModuleView,
   onSelectView,
 }: Props) {
-  const [expanded, setExpanded] = useState<Record<ToolGroupKey, boolean>>({
+  const [expanded, setExpanded] = useState<Record<GroupKey, boolean>>({
     story: true,
-    blueprint: true,
-    draft: true,
-    manuscript: true,
-    tools: true,
+    blueprint: false,
+    manuscript: false,
+    library: false,
   })
 
-  function toggleGroup(group: ToolGroupKey, openView: ViewKey) {
-    setExpanded((current) => ({ ...current, [group]: !current[group] }))
+  function toggleGroup(group: GroupKey, openView: ViewKey) {
+    setExpanded((current) => {
+      const next = { ...current, [group]: !current[group] }
+      if (group === 'blueprint' && next.blueprint) next.manuscript = false
+      if (group === 'manuscript' && next.manuscript) next.blueprint = false
+      return next
+    })
     onSelectView(openView)
   }
 
@@ -140,24 +194,26 @@ export function ProjectPanel({
       {activeModule === 'project-structure' ? (
         <>
           <header className="project-panel-header">
-            <p className="project-panel-kicker">项目结构</p>
+            <p className="project-panel-kicker">{t(locale, 'panel.projectStructure')}</p>
             {project && (
               <div className="project-title-row">
                 <h1>{project.name}</h1>
-                <button type="button" className="icon-button" title="刷新项目">R</button>
+                <button type="button" className="icon-button" title={t(locale, 'panel.refreshProject')}>R</button>
               </div>
             )}
-            {project && <p className="project-path">{project.root_path}</p>}
             {!project && <p className="project-path">{message}</p>}
           </header>
           <ProjectStructureTree
             activeView={activeView}
             chapters={chapters}
+            volumes={volumes}
             expanded={expanded}
             project={project}
             selectedChapterId={selectedChapterId}
             onSelectChapter={onSelectChapter}
             onSelectView={onSelectView}
+            locale={locale}
+            t={t}
             toggleGroup={toggleGroup}
           />
         </>
@@ -167,9 +223,11 @@ export function ProjectPanel({
           activeModuleView={activeModuleView}
           project={project}
           recentProjects={recentProjects}
+          locale={locale}
           onSelectModule={onSelectModule}
           onSelectModuleView={onSelectModuleView}
           onSelectRecentProject={onSelectRecentProject}
+          t={t}
         />
       )}
     </aside>
@@ -179,38 +237,45 @@ export function ProjectPanel({
 function ProjectStructureTree({
   activeView,
   chapters,
+  volumes,
   expanded,
   project,
   selectedChapterId,
   onSelectChapter,
   onSelectView,
+  locale,
+  t,
   toggleGroup,
 }: {
   activeView: ViewKey
   chapters: ChapterSummary[]
-  expanded: Record<ToolGroupKey, boolean>
+  volumes: VolumeInfo[]
+  expanded: Record<GroupKey, boolean>
   project: ProjectSummary | null
   selectedChapterId: string
   onSelectChapter: (chapterId: string) => void
   onSelectView: (view: ViewKey) => void
-  toggleGroup: (group: ToolGroupKey, openView: ViewKey) => void
+  locale: Locale
+  t: T
+  toggleGroup: (group: GroupKey, openView: ViewKey) => void
 }) {
   return (
     <section className="tree-section vela-tree">
-      <TreeButton
+      <TreeParent
         active={activeView === 'novel-settings'}
-        badge={project ? '已打开' : '入口'}
+        count={project ? 'Open' : 'Entry'}
+        expanded
         icon="SET"
-        label="小说设置"
+        label={t(locale, 'panel.novelSettings')}
         onClick={() => onSelectView('novel-settings')}
       />
 
       <TreeParent
         active={isStoryView(activeView)}
-        count={`${storyItems.length}/5`}
+        count={`${storyItems.length}/6`}
         expanded={expanded.story}
         icon="ST"
-        label="故事框架"
+        label={t(locale, 'panel.storyFrame')}
         onClick={() => toggleGroup('story', 'story-premise')}
       />
       {expanded.story && (
@@ -220,7 +285,7 @@ function ProjectStructureTree({
               key={item.key}
               active={activeView === item.key}
               icon={item.icon}
-              label={item.label}
+              label={t(locale, item.labelKey)}
               onClick={() => onSelectView(item.key)}
             />
           ))}
@@ -230,10 +295,12 @@ function ProjectStructureTree({
       <ChapterGroup
         activeView={activeView}
         chapters={chapters}
-        countLabel={`${chapters.length} 章`}
+        volumes={volumes}
+        countLabel={`${chapters.length}`}
         expanded={expanded.blueprint}
         icon="BP"
-        label="章节蓝图"
+        label={t(locale, 'panel.chapterBlueprint')}
+        emptyLabel={t(locale, 'panel.openProjectChapters')}
         selectedChapterId={selectedChapterId}
         targetView="chapter-blueprint"
         onParentClick={() => toggleGroup('blueprint', 'chapter-blueprint')}
@@ -244,46 +311,37 @@ function ProjectStructureTree({
       <ChapterGroup
         activeView={activeView}
         chapters={chapters}
-        countLabel={`${chapters.length} 章`}
-        expanded={expanded.draft}
-        icon="DR"
-        label="草稿箱"
-        selectedChapterId={selectedChapterId}
-        targetView="draft-box"
-        onParentClick={() => toggleGroup('draft', 'draft-box')}
-        onSelectChapter={onSelectChapter}
-        onSelectView={onSelectView}
-      />
-
-      <ChapterGroup
-        activeView={activeView}
-        chapters={chapters}
-        countLabel={`${chapters.filter((chapter) => chapter.words > 0).length} 章`}
+        volumes={volumes}
+        countLabel={`${chapters.filter((chapter) => chapter.words > 0).length}`}
         expanded={expanded.manuscript}
         icon="MS"
-        label="正文"
+        label={t(locale, 'panel.manuscript')}
+        emptyLabel={t(locale, 'panel.openProjectChapters')}
         selectedChapterId={selectedChapterId}
         targetView="manuscript"
+        alternateActiveView="draft-box"
         onParentClick={() => toggleGroup('manuscript', 'manuscript')}
         onSelectChapter={onSelectChapter}
         onSelectView={onSelectView}
       />
 
       <TreeParent
-        active={isToolView(activeView)}
-        count="5"
-        expanded={expanded.tools}
-        icon="TL"
-        label="工具与设置"
-        onClick={() => toggleGroup('tools', 'facts')}
+        active={activeView === 'local-files'}
+        count="MD"
+        expanded={expanded.library}
+        icon="LB"
+        label={t(locale, 'panel.library')}
+        onClick={() => toggleGroup('library', 'local-files')}
       />
-      {expanded.tools && (
-        <div className="tree-tools tree-children">
-          <TreeButton active={activeView === 'facts'} badge="约束" icon="FT" label="事实库" onClick={() => onSelectView('facts')} />
-          <TreeButton active={activeView === 'skills'} badge="已选" icon="SK" label="Skill" onClick={() => onSelectView('skills')} />
-          <TreeButton active={activeView === 'ai-providers'} badge="API" icon="AI" label="AI Provider" onClick={() => onSelectView('ai-providers')} />
-          <TreeButton active={activeView === 'local-files'} badge=".md" icon="MD" label="本地 Markdown" onClick={() => onSelectView('local-files')} />
-          <TreeButton active={activeView === 'exports'} badge="MD/TXT/Word" icon="EX" label="导出" onClick={() => onSelectView('exports')} />
+      {expanded.library && (
+        <div className="tree-children">
+          <TreeButton
+            active={activeView === 'local-files'}
+            badge=".md"
+            icon="MD"
+            label={t(locale, 'panel.localFiles')}
+            onClick={() => onSelectView('local-files')}
+          />
         </div>
       )}
     </section>
@@ -295,27 +353,28 @@ function ModulePanel({
   activeModuleView,
   project,
   recentProjects,
+  locale,
   onSelectModule,
   onSelectModuleView,
   onSelectRecentProject,
+  t,
 }: {
   activeModule: ModuleKey
   activeModuleView: ModuleSubViewKey
   project: ProjectSummary | null
   recentProjects: RecentProject[]
+  locale: Locale
   onSelectModule: (module: ModuleKey) => void
   onSelectModuleView: (view: ModuleSubViewKey) => void
   onSelectRecentProject: (name: string, rootPath: string) => void
+  t: T
 }) {
-  const meta = getModuleMeta(activeModule)
+  const meta = getModuleMeta(activeModule, locale, t)
 
   return (
     <>
       <header className="project-panel-header">
         <p className="project-panel-kicker">{meta.kicker}</p>
-        <div className="project-title-row">
-          <h1>{meta.title}</h1>
-        </div>
         <p className="project-path">{meta.description}</p>
       </header>
       <section className="tree-section vela-tree">
@@ -327,18 +386,17 @@ function ModulePanel({
             onClick={() => onSelectModuleView(item.view)}
           >
             <strong>{item.title}</strong>
-            <span>{item.detail}</span>
+            {item.detail && <span>{item.detail}</span>}
           </button>
         ))}
-        {activeModule !== 'project-structure' && (
+        {activeModule !== 'project-structure' && activeModule !== 'home' && project && (
           <button type="button" className="tree-item" onClick={() => onSelectModule('project-structure')}>
-            <span><b>P</b>返回项目结构</span>
+            <span><b>{t(locale, 'nav.project')}</b>{t(locale, 'panel.enterProject')}</span>
           </button>
         )}
       </section>
       {activeModule === 'home' && recentProjects.length > 0 && !project && (
         <section className="recent-compact">
-          <h2>最近项目</h2>
           {recentProjects.slice(0, 3).map((item) => (
             <button
               type="button"
@@ -347,7 +405,6 @@ function ModulePanel({
               onClick={() => onSelectRecentProject(item.name, item.root_path)}
             >
               <strong>{item.name}</strong>
-              <span>{item.root_path}</span>
             </button>
           ))}
         </section>
@@ -356,7 +413,7 @@ function ModulePanel({
   )
 }
 
-function getModuleMeta(module: ModuleKey) {
+function getModuleMeta(module: ModuleKey, locale: Locale, t: T) {
   const map: Record<ModuleKey, {
     kicker: string
     title: string
@@ -364,69 +421,70 @@ function getModuleMeta(module: ModuleKey) {
     items: Array<{ title: string; detail: string; view: ModuleSubViewKey }>
   }> = {
     home: {
-      kicker: '首页',
-      title: '项目入口',
-      description: '新建、打开和导入本地小说项目。这里是软件入口，不承载小说框架编辑。',
+      kicker: t(locale, 'panel.projectManagement'),
+      title: t(locale, 'panel.projectManagement'),
+      description: '',
       items: [
-        { title: '项目入口', detail: '创建或打开本地 Olienta 项目', view: 'home-entry' },
-        { title: '最近项目', detail: '快速回到最近写作项目', view: 'home-recent' },
+        { title: t(locale, 'panel.newProject'), detail: '', view: 'home-entry' },
+        { title: t(locale, 'panel.recentProjects'), detail: '', view: 'home-recent' },
       ],
     },
     'project-structure': {
-      kicker: '项目结构',
-      title: '项目结构',
-      description: '小说设置、故事框架、章节蓝图、草稿箱和正文都属于这里。',
+      kicker: t(locale, 'panel.projectStructure'),
+      title: t(locale, 'panel.projectStructure'),
+      description: locale === 'en-US'
+        ? 'Novel structure, story frame, library, chapter blueprints, and manuscript all live here. AI drafts stay in manuscript draft versions.'
+        : '小说结构、故事框架、资料库、章节蓝图和正文都属于这里；AI 候选稿归入正文草稿版本。',
       items: [],
     },
     knowledge: {
-      kicker: '知识库',
-      title: '知识库',
-      description: '管理事实、伏笔、本地 Markdown、Skill 和本地全文检索。',
+      kicker: t(locale, 'nav.knowledge'),
+      title: t(locale, 'nav.knowledge'),
+      description: t(locale, 'module.knowledge.description'),
       items: [
-        { title: '知识库总览', detail: '项目健康、事实、伏笔、Skill 和资料状态', view: 'knowledge-overview' },
-        { title: '事实库', detail: '已确认事实、未闭合伏笔和禁止违背规则', view: 'knowledge-facts' },
-        { title: '本地 Markdown', detail: '查看项目内所有 .md 文件', view: 'knowledge-markdown' },
-        { title: 'Skill', detail: '导入和选择写作方法文件', view: 'knowledge-skills' },
-        { title: '本地全文检索', detail: '按范围检索本地资料，并钉选进任务书', view: 'knowledge-search' },
+        { title: t(locale, 'module.knowledge.markdown'), detail: t(locale, 'module.knowledge.markdownDetail'), view: 'knowledge-markdown' },
+        { title: t(locale, 'module.knowledge.facts'), detail: t(locale, 'module.knowledge.factsDetail'), view: 'knowledge-facts' },
+        { title: 'Skill', detail: t(locale, 'module.knowledge.skillsDetail'), view: 'knowledge-skills' },
+        { title: t(locale, 'module.knowledge.search'), detail: t(locale, 'module.knowledge.searchDetail'), view: 'knowledge-search' },
       ],
     },
     characters: {
-      kicker: '角色',
-      title: '角色管理',
-      description: '从角色图谱拆出角色卡、关系图和成长线。',
+      kicker: t(locale, 'nav.characters'),
+      title: t(locale, 'module.characters.title'),
+      description: t(locale, 'module.characters.description'),
       items: [
-        { title: '角色总览', detail: '人物卡、关系和成长状态', view: 'characters-overview' },
-        { title: '角色列表', detail: '从角色图谱抽取人物卡', view: 'characters-cards' },
-        { title: '关系图谱', detail: '角色关系、欲望、利益和冲突', view: 'characters-relations' },
-        { title: '成长线', detail: '角色状态随章节变化', view: 'characters-growth' },
+        { title: t(locale, 'module.characters.overview'), detail: t(locale, 'module.characters.overviewDetail'), view: 'characters-overview' },
+        { title: t(locale, 'module.characters.cards'), detail: t(locale, 'module.characters.cardsDetail'), view: 'characters-cards' },
+        { title: t(locale, 'module.characters.relations'), detail: t(locale, 'module.characters.relationsDetail'), view: 'characters-relations' },
+        { title: t(locale, 'module.characters.growth'), detail: t(locale, 'module.characters.growthDetail'), view: 'characters-growth' },
       ],
     },
     tasks: {
-      kicker: '任务',
-      title: '任务',
-      description: '管理当前章节任务书、钉选材料和 AI 工作流进度。',
+      kicker: t(locale, 'nav.tasks'),
+      title: t(locale, 'nav.tasks'),
+      description: t(locale, 'module.tasks.description'),
       items: [
-        { title: '当前任务', detail: '当前章节任务书、钉选材料和生成入口', view: 'tasks-current' },
-        { title: '历史任务', detail: '已完成或失败的任务记录', view: 'tasks-history' },
+        { title: t(locale, 'module.tasks.current'), detail: t(locale, 'module.tasks.currentDetail'), view: 'tasks-current' },
+        { title: t(locale, 'module.tasks.history'), detail: t(locale, 'module.tasks.historyDetail'), view: 'tasks-history' },
       ],
     },
     logs: {
-      kicker: '日志',
-      title: '日志',
-      description: '记录作者确认、保存、导出、蓝图覆盖和事实抽取事件。',
+      kicker: t(locale, 'nav.logs'),
+      title: t(locale, 'nav.logs'),
+      description: t(locale, 'module.logs.description'),
       items: [
-        { title: '作者确认日志', detail: '正文保存后的确认记录', view: 'logs-author-confirmation' },
-        { title: '系统事件', detail: '蓝图覆盖、事实重扫和导出记录', view: 'logs-system-events' },
+        { title: t(locale, 'module.logs.author'), detail: t(locale, 'module.logs.authorDetail'), view: 'logs-author-confirmation' },
+        { title: t(locale, 'module.logs.system'), detail: t(locale, 'module.logs.systemDetail'), view: 'logs-system-events' },
       ],
     },
     'model-calls': {
-      kicker: '模型调用',
-      title: '模型调用',
-      description: '集中管理 AI Provider、模型测试和调用记录。',
+      kicker: t(locale, 'nav.models'),
+      title: t(locale, 'nav.models'),
+      description: t(locale, 'module.models.description'),
       items: [
-        { title: 'AI Provider', detail: '配置 API、模型和用途', view: 'model-providers' },
-        { title: '调用记录', detail: '记录每次 AI 请求和结果', view: 'model-call-records' },
-        { title: '连接测试', detail: '测试默认 Provider 是否可用', view: 'model-tests' },
+        { title: t(locale, 'module.models.providers'), detail: t(locale, 'module.models.providersDetail'), view: 'model-providers' },
+        { title: t(locale, 'module.models.records'), detail: t(locale, 'module.models.recordsDetail'), view: 'model-call-records' },
+        { title: t(locale, 'module.models.tests'), detail: t(locale, 'module.models.testsDetail'), view: 'model-tests' },
       ],
     },
   }
@@ -437,29 +495,36 @@ function getModuleMeta(module: ModuleKey) {
 function ChapterGroup({
   activeView,
   chapters,
+  volumes,
   countLabel,
   expanded,
   icon,
   label,
+  emptyLabel,
   selectedChapterId,
   targetView,
+  alternateActiveView,
   onParentClick,
   onSelectChapter,
   onSelectView,
 }: {
   activeView: ViewKey
   chapters: ChapterSummary[]
+  volumes: VolumeInfo[]
   countLabel: string
   expanded: boolean
   icon: string
   label: string
+  emptyLabel: string
   selectedChapterId: string
   targetView: ViewKey
+  alternateActiveView?: ViewKey
   onParentClick: () => void
   onSelectChapter: (chapterId: string) => void
   onSelectView: (view: ViewKey) => void
 }) {
-  const active = activeView === targetView
+  const active = activeView === targetView || activeView === alternateActiveView
+  const chapterRows = chapterRowsWithVolumeDividers(chapters, volumes)
 
   return (
     <div className="tree-group">
@@ -474,28 +539,53 @@ function ChapterGroup({
       {expanded && (
         <div className="tree-children chapter-children">
           {chapters.length === 0 ? (
-            <p className="tree-empty">打开项目后显示章节</p>
+            <p className="tree-empty">{emptyLabel}</p>
           ) : (
-            chapters.map((chapter, index) => (
-              <button
-                type="button"
-                className={`chapter-row compact ${active && chapter.id === selectedChapterId ? 'active' : ''}`}
-                key={`${targetView}-${chapter.id}`}
-                onClick={() => {
-                  onSelectChapter(chapter.id)
-                  onSelectView(targetView)
-                }}
-              >
-                <span>{index + 1}</span>
-                <strong>{chapter.title}</strong>
-                <small>{chapter.words} 字 · {chapter.state}</small>
-              </button>
+            chapterRows.map((row) => (
+              row.kind === 'volume' ? (
+                <div className="chapter-volume-divider" key={`${targetView}-${row.volume.id}`}>
+                  <strong>{row.volume.title}</strong>
+                  <small>{row.volume.startChapter} - {row.volume.endChapter} 章</small>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={`chapter-row compact ${active && row.chapter.id === selectedChapterId ? 'active' : ''}`}
+                  key={`${targetView}-${row.chapter.id}`}
+                  onClick={() => {
+                    onSelectChapter(row.chapter.id)
+                    onSelectView(targetView)
+                  }}
+                >
+                  <span>{row.index + 1}</span>
+                  <strong>{row.chapter.title}</strong>
+                  <small>{row.chapter.words} 字 · {row.chapter.state}</small>
+                </button>
+              )
             ))
           )}
         </div>
       )}
     </div>
   )
+}
+
+function chapterRowsWithVolumeDividers(chapters: ChapterSummary[], volumes: VolumeInfo[]) {
+  const rows: Array<
+    | { kind: 'volume'; volume: VolumeInfo }
+    | { kind: 'chapter'; chapter: ChapterSummary; index: number }
+  > = []
+  let currentVolumeId = ''
+  chapters.forEach((chapter, index) => {
+    const chapterNumber = Number(chapter.id)
+    const volume = volumes.find((item) => chapterNumber >= item.startChapter && chapterNumber <= item.endChapter)
+    if (volume && volume.id !== currentVolumeId) {
+      rows.push({ kind: 'volume', volume })
+      currentVolumeId = volume.id
+    }
+    rows.push({ kind: 'chapter', chapter, index })
+  })
+  return rows
 }
 
 function TreeParent({
@@ -516,7 +606,7 @@ function TreeParent({
   return (
     <button type="button" className={`tree-item parent ${active ? 'active' : ''}`} onClick={onClick}>
       <span>
-        <i>{expanded ? 'v' : '>'}</i>
+        <i aria-hidden="true">{expanded ? '⌄' : ''}</i>
         <b>{icon}</b>
         {label}
       </span>
@@ -552,16 +642,7 @@ function isStoryView(view: ViewKey) {
     view === 'characters' ||
     view === 'world' ||
     view === 'plot-outline' ||
+    view === 'important-scenes' ||
     view === 'timeline'
-  )
-}
-
-function isToolView(view: ViewKey) {
-  return (
-    view === 'facts' ||
-    view === 'skills' ||
-    view === 'ai-providers' ||
-    view === 'local-files' ||
-    view === 'exports'
   )
 }

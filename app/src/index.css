@@ -1,31 +1,65 @@
 :root {
-  --text: #8ea8c7;
-  --text-strong: #ecf6ff;
-  --muted: #5f7da0;
-  --bg: #07111e;
-  --paper: #081320;
-  --panel: #0d1a2c;
-  --panel-2: #10233a;
-  --card: #0f2035;
-  --control: #10253d;
-  --input: #091827;
-  --border: #1c3652;
-  --accent: #80d8ff;
-  --accent-2: #a79bea;
-  --success: #3fe08f;
-  --warning: #f6c744;
-  --danger: #ef8080;
-  --sans: Inter, 'Segoe UI', 'Microsoft YaHei UI', Arial, sans-serif;
-  --serif: 'Noto Serif SC', 'Songti SC', Georgia, serif;
+  --text: #56665f;
+  --text-strong: #15231f;
+  --muted: #7f8f89;
+  --bg: #edf2ee;
+  --paper: #f8f5ef;
+  --panel: #f2f7f3;
+  --panel-2: #e9f1ed;
+  --card: #fffdf8;
+  --control: #f2f7f3;
+  --input: #fffefa;
+  --border: #d8e2dc;
+  --accent: #3a8e84;
+  --accent-2: #78a6b8;
+  --accent-soft: #e5f2ee;
+  --success: #2fa76d;
+  --warning: #d89b31;
+  --danger: #c95b5b;
+  --coral: #d9795f;
+  --line-strong: #bfd3ca;
+  --shadow-soft: 0 16px 36px rgba(42, 61, 54, 0.08);
+  --shadow-hover: 0 18px 42px rgba(42, 61, 54, 0.12);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --sans: Inter, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', Arial, sans-serif;
+  --serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
   font: 14px/1.45 var(--sans);
   letter-spacing: 0;
-  color-scheme: dark;
+  color-scheme: light;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body.dark-theme {
+  --text: #b8c8c3;
+  --text-strong: #edf6f3;
+  --muted: #84968f;
+  --bg: #0d1714;
+  --paper: #101a17;
+  --panel: #121e1a;
+  --panel-2: #172823;
+  --card: #13211d;
+  --control: #1a2b26;
+  --input: #0e1916;
+  --border: #2a3d36;
+  --accent: #73d1c2;
+  --accent-2: #91bdd8;
+  --accent-soft: #193630;
+  --success: #61c993;
+  --warning: #e0b153;
+  --danger: #e27c7c;
+  --coral: #e08c77;
+  --line-strong: #3d5d53;
+  --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.26);
+  --shadow-hover: 0 20px 48px rgba(0, 0, 0, 0.34);
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
 }
 
 #root {
@@ -55,4 +89,9 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+::selection {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
 }

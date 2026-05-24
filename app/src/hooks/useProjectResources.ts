@@ -8,11 +8,13 @@ import type {
   ProjectHealthReport,
   ProjectSummary,
   ProjectVaultEntry,
+  ProviderBatchTestResult,
   ProviderTestResult,
   SkillFileSummary,
   TimelineSettings,
+  VolumeInfo,
 } from '../types'
-import { errorToString } from '../utils'
+import { errorToString, isSampleProjectRoot } from '../utils'
 
 type KnowledgeFileKind = tauriApi.KnowledgeFileKind
 
@@ -20,6 +22,25 @@ type UseProjectResourcesInput = {
   project: ProjectSummary | null
   setMessage: (message: string) => void
   setAssistantState: (state: string) => void
+}
+
+function emitTaskLog(message: string, status: 'ready' | 'working' | 'done' | 'error' = 'working') {
+  window.dispatchEvent(new CustomEvent('olienta:task-log', { detail: { message, status } }))
+}
+
+function hasUsableProviderConfig(content: string) {
+  const parsed = JSON.parse(content)
+  if (!Array.isArray(parsed)) return false
+  return parsed.some((item) => {
+    if (!item || typeof item !== 'object') return false
+    const provider = item as Record<string, unknown>
+    const hasSecret =
+      (typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0) ||
+      (typeof provider.apiKeyEncrypted === 'string' && provider.apiKeyEncrypted.trim().length > 0)
+    const hasModel = typeof provider.model === 'string' && provider.model.trim().length > 0
+    const hasBaseUrl = typeof provider.baseUrl === 'string' && provider.baseUrl.trim().length > 0
+    return provider.enabled !== false && hasSecret && hasModel && hasBaseUrl
+  })
 }
 
 export function useProjectResources({
@@ -34,15 +55,18 @@ export function useProjectResources({
   const [forbiddenRules, setForbiddenRules] = useState('# 禁止违背\n\n')
   const [forbiddenRulesPath, setForbiddenRulesPath] = useState('facts/forbidden-rules.md')
   const [aiProvidersJson, setAiProvidersJson] = useState('[]\n')
-  const [aiProvidersPath, setAiProvidersPath] = useState('.olienta/ai-providers.json')
+  const [aiProvidersPath, setAiProvidersPath] = useState('软件设置/ai-providers.json')
   const [providerTestMessage, setProviderTestMessage] = useState('尚未测试')
   const [timelineEvents, setTimelineEvents] = useState('# 时间线事件\n\n')
   const [timelineEventsPath, setTimelineEventsPath] = useState('timeline/events.md')
+  const [timelineMilestones, setTimelineMilestones] = useState('# 里程碑\n\n')
+  const [timelineMilestonesPath, setTimelineMilestonesPath] = useState('timeline/milestones.md')
   const [timelineSettings, setTimelineSettings] = useState<TimelineSettings>({
     enabled: false,
     conflictCheck: false,
     storage: 'local-folder',
   })
+  const [volumes, setVolumes] = useState<VolumeInfo[]>([])
   const [frameworkFiles, setFrameworkFiles] = useState<FrameworkFileSummary[]>([])
   const [markdownFiles, setMarkdownFiles] = useState<MarkdownFileSummary[]>([])
   const [projectVaultEntries, setProjectVaultEntries] = useState<ProjectVaultEntry[]>([])
@@ -58,10 +82,10 @@ export function useProjectResources({
   const [frameworkPath, setFrameworkPath] = useState('framework/01-setting.md')
 
   async function loadKnowledgeFiles(rootPath: string) {
-    if (!isTauriRuntime) {
-      setConfirmedFacts('# 已确认事实\n\n浏览器预览模式。')
-      setOpenLoops('# 未闭合伏笔\n\n- 浏览器预览模式。')
-      setForbiddenRules('# 禁止违背\n\n- 浏览器预览模式。')
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
+      setConfirmedFacts('# 已确认事实\n\n浏览器预览只展示界面，不会读取或写入本地项目。请打开桌面版使用真实资料库。')
+      setOpenLoops('# 未闭合伏笔\n\n- 浏览器预览只展示界面，不会读取或写入本地项目。请打开桌面版使用真实资料库。')
+      setForbiddenRules('# 禁止违背\n\n- 浏览器预览只展示界面，不会读取或写入本地项目。请打开桌面版使用真实资料库。')
       return
     }
 
@@ -86,7 +110,7 @@ export function useProjectResources({
 
     setAssistantState('正在保存记忆文件')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已保存')
         return
       }
@@ -106,7 +130,7 @@ export function useProjectResources({
         setConfirmedFactsPath(saved.relative_path)
       }
       setAssistantState('记忆文件已保存')
-      setMessage(`${saved.relative_path} 已保存，会进入后续任务书。`)
+      setMessage(`${saved.relative_path} 已保存，会进入后续本章写作要求。`)
     } catch (error) {
       setAssistantState('保存失败')
       setMessage(errorToString(error))
@@ -114,8 +138,14 @@ export function useProjectResources({
   }
 
   async function loadAiProviders(rootPath: string) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setAiProvidersJson('[]\n')
+      setAiProvidersPath('软件设置/ai-providers.json')
+      setProviderTestMessage(
+        isSampleProjectRoot(rootPath)
+          ? '示例项目不读取本机 AI Provider；请打开自己的本地项目后配置。'
+          : '浏览器预览不读取本机 AI Provider。',
+      )
       return
     }
 
@@ -125,47 +155,57 @@ export function useProjectResources({
   }
 
   async function saveAiProviders() {
-    if (!project) {
-      setMessage('请先创建或打开项目。')
-      return false
-    }
-
     setAssistantState('正在保存 AI 配置')
+    emitTaskLog('开始保存软件级 AI Provider 配置。')
     try {
-      if (!isTauriRuntime) {
-        JSON.parse(aiProvidersJson)
-        setAssistantState('预览已保存')
-        return true
+      if (!hasUsableProviderConfig(aiProvidersJson)) {
+        setProviderTestMessage('未配置可用 Provider：请至少填写启用的 Base URL、API Key 和模型。')
+        setAssistantState('Provider 配置不完整')
+        setMessage('未配置可用 Provider，已阻止保存为可用 AI 配置。')
+        emitTaskLog('AI Provider 配置不完整：未保存。', 'error')
+        return false
       }
 
-      const saved = await tauriApi.saveAiProviders(project.root_path, aiProvidersJson)
+      if (!isTauriRuntime) {
+        JSON.parse(aiProvidersJson)
+        setProviderTestMessage('浏览器预览不能保存 API。请使用桌面版 Olienta 保存软件级配置。')
+        setAssistantState('预览不能保存 API')
+        setMessage('浏览器预览不能保存 API。请打开桌面版 Olienta 后再保存。')
+        emitTaskLog('浏览器预览不能保存 API 配置。', 'error')
+        return false
+      }
+
+      const saved = await tauriApi.saveAiProviders(project?.root_path ?? '', aiProvidersJson)
       setAiProvidersPath(saved.relative_path)
       setAiProvidersJson(saved.content)
-      await loadMarkdownFiles(project.root_path)
-      await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
+      if (project) {
+        await loadMarkdownFiles(project.root_path)
+        await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
+      }
       setAssistantState('AI 配置已保存')
-      setMessage('AI Provider 配置已保存。')
+      setProviderTestMessage(`已保存到软件设置 · ${saved.relative_path}`)
+      setMessage('AI Provider 配置已保存为软件级设置，所有项目共用。')
+      emitTaskLog(`AI Provider 配置已保存：${saved.relative_path}`, 'done')
       return true
     } catch (error) {
+      setProviderTestMessage(`保存失败 · ${errorToString(error)}`)
       setAssistantState('保存失败')
       setMessage(errorToString(error))
+      emitTaskLog(`AI Provider 保存失败：${errorToString(error)}`, 'error')
       return false
     }
   }
 
   async function testAiProvider(): Promise<ProviderTestResult | null | void> {
-    if (!project) {
-      setMessage('请先创建或打开项目。')
-      return
-    }
-
     setAssistantState('正在测试 Provider')
     setProviderTestMessage('测试中...')
+    emitTaskLog('开始测试当前默认 Provider。')
     try {
       if (!isTauriRuntime) {
         JSON.parse(aiProvidersJson)
         setProviderTestMessage('浏览器预览：JSON 有效，桌面端会发起真实连接测试。')
         setAssistantState('预览测试完成')
+        emitTaskLog('浏览器预览：Provider JSON 有效。', 'done')
         return
       }
 
@@ -174,23 +214,62 @@ export function useProjectResources({
         return
       }
 
-      const result = await tauriApi.testAiProvider(project.root_path)
+      const result = await tauriApi.testAiProvider(project?.root_path ?? '')
       setProviderTestMessage(
         `${result.ok ? '可用' : '不可用'} · ${result.provider} · ${result.message}`,
       )
-      await loadMarkdownFiles(project.root_path)
-      await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
+      if (project) {
+        await loadMarkdownFiles(project.root_path)
+        await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
+      }
       setAssistantState(result.ok ? 'Provider 可用' : 'Provider 不可用')
+      emitTaskLog(`${result.ok ? 'Provider 测试通过' : 'Provider 测试失败'}：${result.provider}`, result.ok ? 'done' : 'error')
       return result
     } catch (error) {
       setProviderTestMessage(errorToString(error))
       setAssistantState('测试失败')
+      emitTaskLog(`Provider 测试失败：${errorToString(error)}`, 'error')
+      return null
+    }
+  }
+
+  async function testAiProviders(): Promise<ProviderBatchTestResult | null | void> {
+    setAssistantState('正在批量测试 Provider')
+    setProviderTestMessage('批量测试中...')
+    emitTaskLog('开始批量测试所有 Provider。')
+    try {
+      if (!isTauriRuntime) {
+        JSON.parse(aiProvidersJson)
+        setProviderTestMessage('浏览器预览：Provider JSON 有效，桌面端会执行批量连接测试。')
+        setAssistantState('预览测试完成')
+        emitTaskLog('浏览器预览：Provider JSON 有效。', 'done')
+        return
+      }
+
+      const saved = await saveAiProviders()
+      if (!saved) {
+        return
+      }
+
+      const result = await tauriApi.testAiProviders(project?.root_path ?? '')
+      setProviderTestMessage(`批量测试：${result.passed}/${result.total} 可用，${result.failed} 失败`)
+      if (project) {
+        await loadMarkdownFiles(project.root_path)
+        await loadMarkdownFile(project.root_path, 'logs/model-calls/history.md')
+      }
+      setAssistantState(result.failed === 0 ? 'Provider 批量测试通过' : 'Provider 批量测试有失败')
+      emitTaskLog(`Provider 批量测试完成：${result.passed}/${result.total} 可用，${result.failed} 失败。`, result.failed === 0 ? 'done' : 'error')
+      return result
+    } catch (error) {
+      setProviderTestMessage(errorToString(error))
+      setAssistantState('批量测试失败')
+      emitTaskLog(`Provider 批量测试失败：${errorToString(error)}`, 'error')
       return null
     }
   }
 
   async function loadFrameworkFiles(rootPath: string) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       const names = isWutongboliPreview(rootPath)
         ? Object.keys(wutongboliFrameworkFiles)
         : ['01-setting.md']
@@ -210,7 +289,7 @@ export function useProjectResources({
   }
 
   async function loadMarkdownFiles(rootPath: string) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       if (isWutongboliPreview(rootPath)) {
         const files = Object.entries(wutongboliFrameworkFiles).map(([name, content]) => ({
           category: '故事构架',
@@ -265,7 +344,7 @@ export function useProjectResources({
 
     setAssistantState('正在补齐项目结构')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setProjectHealth(makePreviewProjectHealth(true))
         setAssistantState('预览已补齐')
         setMessage('浏览器预览已模拟补齐；桌面端会真实写入缺失文件。')
@@ -292,7 +371,7 @@ export function useProjectResources({
     }
 
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setMessage(`浏览器预览不能打开系统文件夹。桌面端会打开：${project.root_path}`)
         return
       }
@@ -331,7 +410,7 @@ export function useProjectResources({
 
     setAssistantState('正在导入资料')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已导入')
         setMessage('浏览器预览已模拟导入；桌面端会复制到 knowledge/markdown/imported。')
         return
@@ -349,7 +428,7 @@ export function useProjectResources({
       await loadMarkdownFiles(project.root_path)
       await loadMarkdownFile(project.root_path, imported.relative_path)
       setAssistantState('资料已导入')
-      setMessage(`${imported.relative_path} 已导入到作品资料夹，可用于本地检索和任务书钉选。`)
+      setMessage(`${imported.relative_path} 已导入到作品资料夹，可用于本地检索和本章写作要求钉选。`)
     } catch (error) {
       setAssistantState('导入失败')
       setMessage(errorToString(error))
@@ -364,7 +443,7 @@ export function useProjectResources({
 
     setAssistantState('正在批量导入资料')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已导入')
         setMessage('浏览器预览已模拟批量导入；桌面端会复制 Markdown/TXT 到 knowledge/markdown/imported。')
         return
@@ -393,7 +472,7 @@ export function useProjectResources({
   }
 
   async function loadSkillFiles(rootPath: string) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setSkillFiles([
         {
           name: 'preview-skill.md',
@@ -421,7 +500,7 @@ export function useProjectResources({
   async function loadSkillFile(rootPath: string, fileName: string) {
     setSelectedSkillName(fileName)
 
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setSkillPreview(`# ${fileName}\n\n浏览器预览模式。`)
       return
     }
@@ -438,7 +517,7 @@ export function useProjectResources({
 
     setAssistantState('正在导入 Skill')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已导入')
         return
       }
@@ -451,10 +530,43 @@ export function useProjectResources({
 
       const imported = await tauriApi.importSkillFile(project.root_path, selected)
       await loadSkillFiles(project.root_path)
+      await loadSkillFile(project.root_path, imported.name)
       await loadMarkdownFiles(project.root_path)
       setSelectedSkillName(imported.name)
-      setMessage(`${imported.relative_path} 已导入并选择，会进入后续写作任务书。`)
+      setMessage(`${imported.relative_path} 已导入并选择，会进入后续本章写作要求。`)
       setAssistantState('Skill 已导入')
+    } catch (error) {
+      setAssistantState('导入失败')
+      setMessage(errorToString(error))
+    }
+  }
+
+  async function importSkillFolder() {
+    if (!project) {
+      setMessage('请先创建或打开项目。')
+      return
+    }
+
+    setAssistantState('正在导入 Skill 文件夹')
+    try {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
+        setAssistantState('预览已导入')
+        return
+      }
+
+      const selected = await tauriApi.chooseSkillFolder()
+      if (!selected) {
+        setAssistantState('已取消导入')
+        return
+      }
+
+      const imported = await tauriApi.importSkillFile(project.root_path, selected)
+      await loadSkillFiles(project.root_path)
+      await loadSkillFile(project.root_path, imported.name)
+      await loadMarkdownFiles(project.root_path)
+      setSelectedSkillName(imported.name)
+      setMessage(`${imported.relative_path} 已导入并选择，会进入后续本章写作要求。`)
+      setAssistantState('Skill 文件夹已导入')
     } catch (error) {
       setAssistantState('导入失败')
       setMessage(errorToString(error))
@@ -468,7 +580,7 @@ export function useProjectResources({
     }
 
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setSkillFiles((files) =>
           files.map((file) => (file.name === fileName ? { ...file, disabled } : file)),
         )
@@ -491,7 +603,7 @@ export function useProjectResources({
     }
 
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setSkillFiles((files) =>
           files.map((file) => (file.name === fileName ? { ...file, temporary } : file)),
         )
@@ -510,7 +622,7 @@ export function useProjectResources({
   async function loadMarkdownFile(rootPath: string, relativePath: string) {
     setSelectedMarkdownPath(relativePath)
 
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       if (isWutongboliPreview(rootPath)) {
         const fileName = relativePath.replace(/^framework\//, '')
         setMarkdownPreview(
@@ -535,7 +647,7 @@ export function useProjectResources({
 
     setAssistantState('正在保存模块文档')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setMarkdownPreview(content)
         setAssistantState('预览已保存')
         return
@@ -553,44 +665,91 @@ export function useProjectResources({
     }
   }
 
-  async function rescanFacts() {
+  async function rescanFacts(kind: 'confirmed-facts' | 'open-loops' | 'forbidden-rules' = 'confirmed-facts', authorInput = '') {
     if (!project) {
       setMessage('请先创建或打开项目。')
       return
     }
 
-    setAssistantState('正在重扫事实')
+    setAssistantState('正在再次生成记忆文件')
     try {
-      if (!isTauriRuntime) {
-        setAssistantState('预览已重扫')
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
+        setAssistantState('预览已再次生成')
         return
       }
 
-      const saved = await tauriApi.rescanFacts(project.root_path)
-      setConfirmedFactsPath(saved.relative_path)
-      setConfirmedFacts(saved.content)
-      setAssistantState('事实库已重扫')
-      setMessage('已从已保存正文重建事实库。')
+      const saved = await tauriApi.regenerateKnowledgeFile(project.root_path, kind, authorInput)
+      if (kind === 'confirmed-facts') {
+        setConfirmedFactsPath(saved.relative_path)
+        setConfirmedFacts(saved.content)
+      } else if (kind === 'open-loops') {
+        setOpenLoopsPath(saved.relative_path)
+        setOpenLoops(saved.content)
+      } else {
+        setForbiddenRulesPath(saved.relative_path)
+        setForbiddenRules(saved.content)
+      }
+      setAssistantState('记忆文件已再次生成')
+      setMessage(`${saved.relative_path} 已再次生成。`)
       await loadMarkdownFiles(project.root_path)
     } catch (error) {
-      setAssistantState('重扫失败')
+      setAssistantState('再次生成失败')
       setMessage(errorToString(error))
     }
   }
 
   async function loadTimelineEvents(rootPath: string) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setTimelineEvents('# 时间线事件\n\n- 浏览器预览模式。')
       return
     }
 
-    const [loaded, settings] = await Promise.all([
+    const [loaded, milestones, settings] = await Promise.all([
       tauriApi.loadTimelineEvents(rootPath),
+      tauriApi.loadTimelineMilestones(rootPath),
       tauriApi.loadTimelineSettings(rootPath),
     ])
     setTimelineEventsPath(loaded.relative_path)
     setTimelineEvents(loaded.content)
+    setTimelineMilestonesPath(milestones.relative_path)
+    setTimelineMilestones(milestones.content)
     setTimelineSettings(settings)
+  }
+
+  async function loadVolumes(rootPath: string) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
+      setVolumes(defaultVolumes(project?.chapter_count ?? wutongboliSampleProject.chapter_count))
+      return
+    }
+
+    const loaded = await tauriApi.loadVolumes(rootPath)
+    setVolumes(loaded)
+  }
+
+  async function saveVolumes(nextVolumes?: VolumeInfo[]) {
+    if (!project) {
+      setMessage('请先创建或打开项目。')
+      return
+    }
+    const targetVolumes = nextVolumes ?? volumes
+    setAssistantState('正在保存分卷')
+    try {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
+        setVolumes(targetVolumes)
+        setAssistantState('示例项目不会写入分卷')
+        setMessage('示例项目不会写入本地文件；请创建或打开自己的作品项目后再保存分卷。')
+        return
+      }
+      const saved = await tauriApi.saveVolumes(project.root_path, targetVolumes)
+      setVolumes(saved)
+      setAssistantState('分卷已保存')
+      setMessage('分卷已保存到 .olienta/volumes.json。')
+      emitTaskLog('分卷配置已保存：.olienta/volumes.json', 'done')
+    } catch (error) {
+      setAssistantState('分卷保存失败')
+      setMessage(errorToString(error))
+      emitTaskLog(`分卷配置保存失败：${errorToString(error)}`, 'error')
+    }
   }
 
   async function saveTimelineEvents() {
@@ -601,7 +760,7 @@ export function useProjectResources({
 
     setAssistantState('正在保存时间线')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已保存')
         return
       }
@@ -617,10 +776,34 @@ export function useProjectResources({
     }
   }
 
+  async function saveTimelineMilestones() {
+    if (!project) {
+      setMessage('请先创建或打开项目。')
+      return
+    }
+
+    setAssistantState('正在保存里程碑')
+    try {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
+        setAssistantState('预览已保存')
+        return
+      }
+
+      const saved = await tauriApi.saveTimelineMilestones(project.root_path, timelineMilestones)
+      setTimelineMilestonesPath(saved.relative_path)
+      setTimelineMilestones(saved.content)
+      setAssistantState('里程碑已保存')
+      setMessage(`${saved.relative_path} 已保存，会进入 Timeline Pro 检查上下文。`)
+    } catch (error) {
+      setAssistantState('保存失败')
+      setMessage(errorToString(error))
+    }
+  }
+
   async function loadFrameworkFile(rootPath: string, fileName: string) {
     setSelectedFrameworkFile(fileName)
 
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setFrameworkPath(`framework/${fileName}`)
       setFrameworkContent(
         isWutongboliPreview(rootPath)
@@ -635,7 +818,7 @@ export function useProjectResources({
     setFrameworkContent(loaded.content)
   }
 
-  async function saveFrameworkFile() {
+  async function saveFrameworkFile(contentOverride?: string) {
     if (!project) {
       setMessage('请先创建或打开项目。')
       return
@@ -643,7 +826,7 @@ export function useProjectResources({
 
     setAssistantState('正在保存框架文件')
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setAssistantState('预览已保存')
         return
       }
@@ -651,12 +834,12 @@ export function useProjectResources({
       const saved = await tauriApi.saveFrameworkFile(
         project.root_path,
         selectedFrameworkFile,
-        frameworkContent,
+        contentOverride ?? frameworkContent,
       )
       setFrameworkPath(saved.relative_path)
       setFrameworkContent(saved.content)
       setAssistantState('框架文件已保存')
-      setMessage(`${saved.relative_path} 已保存，会进入后续任务书。`)
+      setMessage(`${saved.relative_path} 已保存，会进入后续本章写作要求。`)
       await loadMarkdownFiles(project.root_path)
     } catch (error) {
       setAssistantState('保存失败')
@@ -681,7 +864,12 @@ export function useProjectResources({
     timelineEvents,
     setTimelineEvents,
     timelineEventsPath,
+    timelineMilestones,
+    setTimelineMilestones,
+    timelineMilestonesPath,
     timelineSettings,
+    volumes,
+    setVolumes,
     frameworkFiles,
     markdownFiles,
     projectVaultEntries,
@@ -692,6 +880,7 @@ export function useProjectResources({
     skillFiles,
     selectedSkillName,
     skillPreview,
+    setSkillPreview,
     skillWarnings,
     selectedFrameworkFile,
     setSelectedFrameworkFile,
@@ -703,6 +892,7 @@ export function useProjectResources({
     loadAiProviders,
     saveAiProviders,
     testAiProvider,
+    testAiProviders,
     loadFrameworkFiles,
     loadMarkdownFiles,
     repairProjectStructure,
@@ -715,13 +905,17 @@ export function useProjectResources({
     loadSkillFiles,
     loadSkillFile,
     importSkillFile,
+    importSkillFolder,
     setSkillDisabled,
     setTemporarySkill,
     rescanFacts,
     loadFrameworkFile,
     saveFrameworkFile,
     loadTimelineEvents,
+    loadVolumes,
+    saveVolumes,
     saveTimelineEvents,
+    saveTimelineMilestones,
   }
 }
 
@@ -731,6 +925,18 @@ function isWutongboliPreview(rootPath: string) {
 
 function normalizePath(path: string) {
   return path.replace(/\\/g, '/').toLowerCase()
+}
+
+function defaultVolumes(chapterCount: number): VolumeInfo[] {
+  return [
+    {
+      id: 'volume-1',
+      title: '第一卷',
+      startChapter: 1,
+      endChapter: Math.max(1, chapterCount),
+      summary: '',
+    },
+  ]
 }
 
 function makePreviewProjectHealth(sample: boolean): ProjectHealthReport {
@@ -743,7 +949,7 @@ function makePreviewProjectHealth(sample: boolean): ProjectHealthReport {
       {
         kind: 'required-directory',
         label: '外部作品文件夹',
-        relative_path: sample ? 'D:/windsurf/olienta-projects/wutongboli-sample-project' : '未打开项目',
+        relative_path: sample ? 'sample://wutongboli' : '未打开项目',
         status: sample ? 'ok' : 'missing',
         message: sample ? '预览测试项目结构完整。' : '桌面端打开项目后会读取真实健康检查。',
       },

@@ -3,6 +3,21 @@ export type InlineDiffChunk = {
   text: string
 }
 
+export type SimilarParagraphDiff = {
+  candidate: string
+  manuscript: string
+  similarity: number
+  inlineDiff: ReturnType<typeof compareInlineDiff>
+}
+
+export type KnowledgeHitKind = 'fact' | 'loop' | 'rule'
+
+export type KnowledgeHit = {
+  kind: KnowledgeHitKind
+  label: string
+  text: string
+}
+
 export type MarkdownAction =
   | 'h1'
   | 'h2'
@@ -65,6 +80,68 @@ export function replaceSelection(value: string, selectionStart: number, selectio
   return { value: nextValue, selectionStart: cursor, selectionEnd: cursor }
 }
 
+export function replaceTextRange(
+  value: string,
+  replacement: string,
+  range: { start: number; end: number },
+) {
+  const start = Math.max(0, Math.min(range.start, value.length))
+  const end = Math.max(start, Math.min(range.end, value.length))
+  const normalizedReplacement = replacement.trim()
+  const nextValue = `${value.slice(0, start)}${normalizedReplacement}${value.slice(end)}`
+  return {
+    value: nextValue,
+    selectionStart: start,
+    selectionEnd: start + normalizedReplacement.length,
+  }
+}
+
+export function candidateTextForAdoption(candidate: string, selection: { start: number; end: number } | null) {
+  const clamped = clampTextSelection(selection, candidate.length)
+  const selected = clamped && clamped.start !== clamped.end ? candidate.slice(clamped.start, clamped.end) : ''
+  return selected.trim() ? selected : candidate
+}
+
+export function adoptCandidateIntoManuscript(
+  manuscript: string,
+  candidate: string,
+  mode: 'replace' | 'append' | 'insert',
+  selection: { start: number; end: number } | null,
+) {
+  const normalizedCandidate = candidate.trim()
+  if (mode === 'replace') {
+    return {
+      value: candidate,
+      selectionStart: 0,
+      selectionEnd: candidate.length,
+    }
+  }
+  if (mode === 'append') {
+    const prefix = manuscript.trim() ? `${manuscript.trimEnd()}\n\n` : ''
+    const value = `${prefix}${candidate.trimStart()}`
+    return {
+      value,
+      selectionStart: prefix.length,
+      selectionEnd: value.length,
+    }
+  }
+
+  const fallback = manuscript.length
+  const start = Math.max(0, Math.min(selection?.start ?? fallback, manuscript.length))
+  const end = Math.max(start, Math.min(selection?.end ?? fallback, manuscript.length))
+  const before = manuscript.slice(0, start).replace(/[ \t]+$/g, '')
+  const after = manuscript.slice(end).replace(/^[ \t]+/g, '')
+  const prefix = before && !before.endsWith('\n') ? '\n\n' : ''
+  const suffix = after && !after.startsWith('\n') ? '\n\n' : ''
+  const insertedAt = before.length + prefix.length
+  const value = `${before}${prefix}${normalizedCandidate}${suffix}${after}`
+  return {
+    value,
+    selectionStart: insertedAt,
+    selectionEnd: insertedAt + normalizedCandidate.length,
+  }
+}
+
 export function estimateTextUnits(content: string) {
   const trimmed = content.trim()
   if (!trimmed) return 0
@@ -113,6 +190,53 @@ export function compareInlineDiff(candidate: string, manuscript: string) {
   }
 }
 
+export function compareSimilarParagraphs(candidate: string, manuscript: string, limit = 5): SimilarParagraphDiff[] {
+  const paragraphDiff = compareParagraphs(candidate, manuscript)
+  const unmatchedManuscript = [...paragraphDiff.manuscriptOnly]
+  const pairs: SimilarParagraphDiff[] = []
+
+  for (const candidateParagraph of paragraphDiff.candidateOnly) {
+    let bestIndex = -1
+    let bestScore = 0
+
+    unmatchedManuscript.forEach((manuscriptParagraph, index) => {
+      const score = paragraphSimilarity(candidateParagraph, manuscriptParagraph)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
+    })
+
+    if (bestIndex < 0 || bestScore < 0.35) continue
+    const manuscriptParagraph = unmatchedManuscript.splice(bestIndex, 1)[0]
+    pairs.push({
+      candidate: candidateParagraph,
+      manuscript: manuscriptParagraph,
+      similarity: Math.round(bestScore * 100),
+      inlineDiff: compareInlineDiff(candidateParagraph, manuscriptParagraph),
+    })
+  }
+
+  return pairs
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, limit)
+}
+
+export function findKnowledgeHitsForParagraph(
+  paragraph: string,
+  sources: { confirmedFacts: string; openLoops: string; forbiddenRules: string },
+  limitPerKind = 3,
+): KnowledgeHit[] {
+  const target = normalizeKnowledgeText(paragraph)
+  if (!target) return []
+
+  return [
+    ...findKnowledgeHitsForKind(target, sources.confirmedFacts, 'fact', '事实', limitPerKind),
+    ...findKnowledgeHitsForKind(target, sources.openLoops, 'loop', '伏笔', limitPerKind),
+    ...findKnowledgeHitsForKind(target, sources.forbiddenRules, 'rule', '禁写', limitPerKind),
+  ]
+}
+
 function wrapSelection(value: string, selectionStart: number, selectionEnd: number, before: string, after: string, placeholder: string) {
   const selected = value.slice(selectionStart, selectionEnd) || placeholder
   const replacement = `${before}${selected}${after}`
@@ -122,6 +246,13 @@ function wrapSelection(value: string, selectionStart: number, selectionEnd: numb
     selectionStart: selectionStart + before.length,
     selectionEnd: selectionStart + before.length + selected.length,
   }
+}
+
+function clampTextSelection(selection: { start: number; end: number } | null, length: number) {
+  if (!selection) return null
+  const start = Math.max(0, Math.min(selection.start, length))
+  const end = Math.max(start, Math.min(selection.end, length))
+  return { start, end }
 }
 
 function insertBlock(value: string, selectionStart: number, selectionEnd: number, block: string) {
@@ -163,6 +294,68 @@ function tokenizeInlineDiff(content: string) {
   return content
     .replace(/[#>*_`-]+/g, ' ')
     .match(/[\u3400-\u9fff]|[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*|[^\s]/g) ?? []
+}
+
+function findKnowledgeHitsForKind(
+  target: string,
+  source: string,
+  kind: KnowledgeHitKind,
+  label: string,
+  limit: number,
+) {
+  const hits: KnowledgeHit[] = []
+  const seen = new Set<string>()
+  for (const entry of knowledgeEntries(source)) {
+    const normalizedEntry = normalizeKnowledgeText(entry)
+    if (!normalizedEntry || seen.has(normalizedEntry)) continue
+    if (isKnowledgeEntryRelated(target, normalizedEntry)) {
+      hits.push({ kind, label, text: trimKnowledgeHit(entry) })
+      seen.add(normalizedEntry)
+    }
+    if (hits.length >= limit) break
+  }
+  return hits
+}
+
+function knowledgeEntries(source: string) {
+  return source
+    .split(/\r\n?|\n/)
+    .map((line) => line.replace(/^\s*(#{1,6}|[-*+]|\d+[.)])\s*/, '').trim())
+    .filter((line) => line.length >= 4 && !/^#+\s*$/.test(line))
+}
+
+function isKnowledgeEntryRelated(target: string, entry: string) {
+  if (target.includes(entry) || entry.includes(target)) return true
+  const terms = knowledgeTerms(entry)
+  if (terms.length === 0) return false
+  const matched = terms.filter((term) => target.includes(term))
+  const matchedUnits = matched.reduce((sum, term) => sum + term.length, 0)
+  return matched.length >= Math.min(2, terms.length) && matchedUnits >= 4
+}
+
+function knowledgeTerms(value: string) {
+  const terms: string[] = []
+  for (const match of value.matchAll(/[\u3400-\u9fff]{2,}|[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)) {
+    const token = match[0].toLowerCase()
+    if (/^[\u3400-\u9fff]+$/.test(token)) {
+      for (let index = 0; index < token.length - 1; index += 1) {
+        terms.push(token.slice(index, index + 2))
+      }
+    } else if (token.length >= 2) {
+      terms.push(token)
+    }
+  }
+  return Array.from(new Set(terms))
+}
+
+function normalizeKnowledgeText(value: string) {
+  return value.replace(/[#>*_`~[\](){}:：，。、“”‘’；;,.!?！？-]+/g, ' ').replace(/\s+/g, '').toLowerCase()
+}
+
+function trimKnowledgeHit(value: string) {
+  const compact = value.replace(/\s+/g, ' ').trim()
+  if (compact.length <= 96) return compact
+  return `${compact.slice(0, 96)}...`
 }
 
 function diffTokens(baseTokens: string[], nextTokens: string[]): InlineDiffChunk[] {
@@ -240,6 +433,29 @@ function joinDiffTokenText(left: string, right: string) {
 
 function diffUnitCount(text: string) {
   return tokenizeInlineDiff(text).length
+}
+
+function paragraphSimilarity(left: string, right: string) {
+  const leftTokens = tokenizeInlineDiff(left)
+  const rightTokens = tokenizeInlineDiff(right)
+  if (leftTokens.length === 0 || rightTokens.length === 0) return 0
+  return lcsLength(leftTokens, rightTokens) / Math.max(leftTokens.length, rightTokens.length)
+}
+
+function lcsLength(left: string[], right: string[]) {
+  const rows = left.length + 1
+  const cols = right.length + 1
+  const table = Array.from({ length: rows }, () => Array(cols).fill(0) as number[])
+
+  for (let row = left.length - 1; row >= 0; row -= 1) {
+    for (let col = right.length - 1; col >= 0; col -= 1) {
+      table[row][col] = left[row] === right[col]
+        ? table[row + 1][col + 1] + 1
+        : Math.max(table[row + 1][col], table[row][col + 1])
+    }
+  }
+
+  return table[0][0]
 }
 
 function toComparableParagraphs(content: string) {

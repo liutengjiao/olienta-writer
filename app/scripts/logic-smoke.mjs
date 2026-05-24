@@ -1,14 +1,19 @@
 import {
+  adoptCandidateIntoManuscript,
   applyMarkdownAction,
+  candidateTextForAdoption,
   cleanPastedText,
   compareInlineDiff,
   compareParagraphs,
+  compareSimilarParagraphs,
   countParagraphs,
   estimateTextUnits,
+  findKnowledgeHitsForParagraph,
   markdownActionForKey,
+  replaceTextRange,
   replaceSelection,
 } from '../src/lib/editorLogic.ts'
-import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders } from '../src/lib/modelCallLogic.ts'
+import { classifyModelCallFailure, estimateModelCallCost, filterModelCallEntries, parseModelCallHistory, summarizeModelCallCosts, summarizeModelCallFailures, summarizeModelCallHistory, summarizeModelCallProviders, summarizeModelCallTasks } from '../src/lib/modelCallLogic.ts'
 import { buildProviderExportJson } from '../src/lib/providerLogic.ts'
 
 const checks = []
@@ -42,6 +47,23 @@ expect('paste clean normalizes line endings', pasted === 'A\n B', JSON.stringify
 const replaced = replaceSelection('abc', 1, 2, 'XYZ')
 expect('replaceSelection replaces exact range', replaced.value === 'aXYZc' && replaced.selectionStart === 4)
 
+const rangeReplaced = replaceTextRange('正文旧段落结尾', '新段落', { start: 2, end: 5 })
+expect('replaceTextRange replaces bounded range', rangeReplaced.value === '正文新段落结尾', rangeReplaced.value)
+expect('replaceTextRange selects replacement', rangeReplaced.selectionStart === 2 && rangeReplaced.selectionEnd === 5, JSON.stringify(rangeReplaced))
+
+const insertedCandidate = adoptCandidateIntoManuscript('开头\n\n结尾', '新增段落', 'insert', { start: 2, end: 2 })
+expect('candidate insert preserves surrounding text', insertedCandidate.value === '开头\n\n新增段落\n\n结尾', insertedCandidate.value)
+expect('candidate insert selects inserted text', insertedCandidate.selectionStart === 4 && insertedCandidate.selectionEnd === 8, JSON.stringify(insertedCandidate))
+
+const replacedSelectionCandidate = adoptCandidateIntoManuscript('开头旧内容结尾', '新内容', 'insert', { start: 2, end: 5 })
+expect('candidate insert replaces selected manuscript range', replacedSelectionCandidate.value === '开头\n\n新内容\n\n结尾', replacedSelectionCandidate.value)
+
+const appendedCandidate = adoptCandidateIntoManuscript('正文', '\n候选', 'append', null)
+expect('candidate append separates paragraphs', appendedCandidate.value === '正文\n\n候选', appendedCandidate.value)
+
+expect('candidate selected text is adopted first', candidateTextForAdoption('第一段\n\n第二段', { start: 5, end: 8 }) === '第二段')
+expect('candidate empty selection falls back to full draft', candidateTextForAdoption('第一段', { start: 1, end: 1 }) === '第一段')
+
 expect('shortcut ctrl+b maps to bold', markdownActionForKey({ key: 'b', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }) === 'bold')
 expect('shortcut tab maps to list', markdownActionForKey({ key: 'Tab', ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }) === 'list')
 
@@ -49,6 +71,19 @@ const paragraphDiff = compareParagraphs('共同段落\n\n新增段落', '共同�
 expect('paragraph diff detects candidate-only paragraph', paragraphDiff.candidateOnly.includes('新增段落'))
 expect('paragraph diff detects manuscript-only paragraph', paragraphDiff.manuscriptOnly.includes('旧段落'))
 expect('paragraph diff counts shared paragraph', paragraphDiff.sharedCount === 1)
+
+const similarParagraphs = compareSimilarParagraphs('他去了深圳新店\n\n完全新增', '他去了深圳旧店\n\n完全无关')
+expect('similar paragraph diff pairs close rewrites', similarParagraphs[0]?.candidate === '他去了深圳新店' && similarParagraphs[0]?.manuscript === '他去了深圳旧店', JSON.stringify(similarParagraphs[0]))
+expect('similar paragraph diff includes inline changes', (similarParagraphs[0]?.inlineDiff.addedUnits ?? 0) > 0 && (similarParagraphs[0]?.inlineDiff.removedUnits ?? 0) > 0, JSON.stringify(similarParagraphs[0]?.inlineDiff))
+
+const knowledgeHits = findKnowledgeHitsForParagraph('他去了深圳新店，并提到还没有回收雨夜承诺。', {
+  confirmedFacts: '- 深圳新店已经开业\n- 北京旧店已经关闭',
+  openLoops: '- 雨夜承诺尚未回收',
+  forbiddenRules: '- 不得写成上海门店',
+})
+expect('knowledge hits include related fact', knowledgeHits.some((hit) => hit.kind === 'fact' && hit.text.includes('深圳新店')), JSON.stringify(knowledgeHits))
+expect('knowledge hits include related loop', knowledgeHits.some((hit) => hit.kind === 'loop' && hit.text.includes('雨夜承诺')), JSON.stringify(knowledgeHits))
+expect('knowledge hits ignore unrelated rule', !knowledgeHits.some((hit) => hit.kind === 'rule'), JSON.stringify(knowledgeHits))
 
 const inlineDiff = compareInlineDiff('他去了深圳新店', '他去了深圳旧店')
 expect('inline diff detects additions', inlineDiff.addedUnits > 0, JSON.stringify(inlineDiff))
@@ -83,6 +118,10 @@ const modelCallHistory = `# 模型调用记录
 
 - status: ok
 - provider: Chapter Provider
+- promptSummary: chapter brief and pinned facts
+- retryAttempts: 1
+- retryReason: provider returned HTTP 500
+- attemptDurationsMs: 120,180
 - durationMs: 1200
 - promptTokens: 100
 - completionTokens: 200
@@ -122,11 +161,16 @@ const candidateCost = estimateModelCallCost(modelCallEntries[0], [{ name: 'Chapt
 const costSummary = summarizeModelCallCosts(modelCallEntries, [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
 const failureSummary = summarizeModelCallFailures(modelCallEntries)
 const providerSummary = summarizeModelCallProviders(modelCallEntries, [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
+const taskSummary = summarizeModelCallTasks(modelCallEntries, [{ name: 'Chapter Provider', inputPricePerMillionTokens: 1, outputPricePerMillionTokens: 2 }])
 expect('model call summary counts calls', modelCallSummary.callCount === 4, JSON.stringify(modelCallSummary))
 expect('model call summary counts failures', modelCallSummary.failedCount === 2, JSON.stringify(modelCallSummary))
 expect('model call summary averages duration', modelCallSummary.averageDurationMs === 1000, JSON.stringify(modelCallSummary))
 expect('model call summary totals tokens', modelCallSummary.totalTokens === 400, JSON.stringify(modelCallSummary))
 expect('model call parser keeps entry fields', modelCallEntries[0]?.provider === 'Chapter Provider' && modelCallEntries[0]?.durationMs === 1200, JSON.stringify(modelCallEntries[0]))
+expect('model call parser keeps prompt summary', modelCallEntries[0]?.promptSummary === 'chapter brief and pinned facts', JSON.stringify(modelCallEntries[0]))
+expect('model call parser keeps retry attempts', modelCallEntries[0]?.retryAttempts === 1, JSON.stringify(modelCallEntries[0]))
+expect('model call parser keeps retry reason', modelCallEntries[0]?.retryReason === 'provider returned HTTP 500', JSON.stringify(modelCallEntries[0]))
+expect('model call parser keeps attempt durations', modelCallEntries[0]?.attemptDurationsMs === '120,180', JSON.stringify(modelCallEntries[0]))
 expect('model call filter matches status and query', failedProviderCalls.length === 2 && failedProviderCalls[0].task === 'provider-test', JSON.stringify(failedProviderCalls))
 expect('model call filter matches provider exactly', chapterProviderCalls.length === 1 && chapterProviderCalls[0].task === 'candidate-draft', JSON.stringify(chapterProviderCalls))
 expect('model call filter matches failure kind', timeoutCalls.length === 1 && timeoutCalls[0].message === 'timeout', JSON.stringify(timeoutCalls))
@@ -139,6 +183,8 @@ expect('model call failure classifier detects auth', classifyModelCallFailure(mo
 expect('model call failure classifier gives advice', classifyModelCallFailure(modelCallEntries[2]).advice.includes('超时秒数'), classifyModelCallFailure(modelCallEntries[2]).advice)
 expect('model call provider summary orders by call count', providerSummary[0]?.provider === 'Broken Provider' && providerSummary[0]?.failureRate === 100, JSON.stringify(providerSummary))
 expect('model call provider summary keeps cost and duration', providerSummary[1]?.provider === 'Chapter Provider' && providerSummary[1]?.averageDurationMs === 1200 && Math.abs(providerSummary[1]?.estimatedCostUsd - 0.0005) < 0.000001, JSON.stringify(providerSummary))
+expect('model call task summary orders by call count', taskSummary[0]?.task === 'provider-test' && taskSummary[0]?.failureRate === 100, JSON.stringify(taskSummary))
+expect('model call task summary keeps primary provider and cost', taskSummary.some((task) => task.task === 'candidate-draft' && task.primaryProvider === 'Chapter Provider' && Math.abs(task.estimatedCostUsd - 0.0005) < 0.000001), JSON.stringify(taskSummary))
 
 for (const check of checks) {
   const prefix = check.ok ? 'PASS' : 'FAIL'

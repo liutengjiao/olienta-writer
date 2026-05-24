@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import * as tauriApi from '../api/tauriApi'
 import { defaultChapters, isTauriRuntime } from '../constants'
-import type { ChapterSummary, ProjectSummary, TaskStatus } from '../types'
-import { countWords, errorToString, makePreviewChapters } from '../utils'
+import type { CandidateReviewIssue, ChapterSummary, ProjectSummary, TaskStatus } from '../types'
+import { countWords, errorToString, isSampleProjectRoot, makePreviewChapters } from '../utils'
 
 type UseChapterWorkspaceInput = {
   project: ProjectSummary | null
@@ -18,6 +18,7 @@ type UseChapterWorkspaceInput = {
   setCandidatePath: (path: string) => void
   setCandidate: (content: string) => void
   setCandidateWarnings: (warnings: string[]) => void
+  setCandidateReviewIssues: (issues: CandidateReviewIssue[]) => void
 }
 
 export function useChapterWorkspace({
@@ -34,6 +35,7 @@ export function useChapterWorkspace({
   setCandidatePath,
   setCandidate,
   setCandidateWarnings,
+  setCandidateReviewIssues,
 }: UseChapterWorkspaceInput) {
   const [selectedChapterId, setSelectedChapterId] = useState('001')
   const [manuscript, setManuscript] = useState(
@@ -50,7 +52,7 @@ export function useChapterWorkspace({
     setSaveState('正在读取')
 
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
         setPreviewChapterFiles(chapterId)
         return
       }
@@ -68,9 +70,10 @@ export function useChapterWorkspace({
       setBlueprintPath(chapterBlueprint.relative_path)
       setBlueprint(chapterBlueprint.content)
       setWritingBriefPath(`tasks/writing-briefs/${chapterId}.md`)
-      setWritingBrief('本章上下文已读取，可以装配写作任务书。')
+      setWritingBrief('本章上下文已读取，可以生成本章写作要求。')
       setCandidatePath(candidate.relative_path)
       setCandidate(candidate.content)
+      setCandidateReviewIssues([])
       setCandidateWarnings([])
       setSaveState('已读取')
       setAssistantState('已读取')
@@ -90,16 +93,17 @@ export function useChapterWorkspace({
     setBlueprintPath(`blueprints/chapters/${chapterId}.md`)
     setBlueprint(`# 第${chapterNumber}章 蓝图\n\n## 本章目标\n\n## 必须发生\n\n## 禁止提前发生\n\n`)
     setWritingBriefPath(`tasks/writing-briefs/${chapterId}.md`)
-    setWritingBrief('浏览器预览模式下会显示模拟任务书；桌面端会读取真实本地文件。')
+    setWritingBrief('浏览器预览模式下会显示模拟写作要求；桌面端会读取真实本地文件。')
     setCandidatePath(`manuscript/candidates/${chapterId}.md`)
     setCandidate('')
+    setCandidateReviewIssues([])
     setCandidateWarnings([])
     setSaveState('预览模式')
     setAssistantState('预览模式')
   }
 
   async function refreshChapters(rootPath: string, fallbackCount: number) {
-    if (!isTauriRuntime) {
+    if (!isTauriRuntime || isSampleProjectRoot(rootPath)) {
       setChapters(makePreviewChapters(fallbackCount))
       return
     }
@@ -118,10 +122,10 @@ export function useChapterWorkspace({
     setTaskStatus('project', 'working')
 
     try {
-      if (!isTauriRuntime) {
+      if (!isTauriRuntime || isSampleProjectRoot(project.root_path)) {
         setSaveState('预览已保存')
         setTaskStatus('project', 'done')
-        setMessage('浏览器预览已模拟保存；桌面端会写入正文、作者确认记录和事件日志。')
+        setMessage(isSampleProjectRoot(project.root_path) ? '示例项目不会写入本地文件；请创建或打开自己的作品项目后再保存。' : '浏览器预览已模拟保存；桌面端会写入正文、作者确认记录和事件日志。')
         return true
       }
 
@@ -161,6 +165,7 @@ export function useChapterWorkspace({
     manuscript,
     setManuscript,
     chapterPath,
+    setChapterPath,
     saveState,
     manuscriptWordCount,
     loadSelectedChapter,

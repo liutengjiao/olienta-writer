@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem in Olienta Writer.
+title: "[Bug]: "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Olienta Writer. Please remove any private manuscript text, API keys, local paths, or paid-provider credentials before submitting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: "Example: Saving a candidate draft does not update the confirmed chapter."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the shortest path that reproduces the issue.
+      placeholder: |
+        1. Open a local project
+        2. Go to ...
+        3. Click ...
+        4. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Screenshots are helpful.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Project setup
+        - Novel structure
+        - Story framework
+        - Blueprint
+        - Manuscript editor
+        - Candidate draft review
+        - Knowledge base
+        - Skill system
+        - AI provider
+        - Export
+        - Packaging or installer
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "Example: v0.2.0 / commit SHA / installer name"
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Browser preview
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant logs only. Do not include API keys or private story text.
+      render: text

@@ -1,5 +1,6 @@
 import type {
   BlueprintHistorySummary,
+  CandidateReviewIssue,
   ChapterSummary,
   CreateProjectInput,
   MarkdownFileSummary,
@@ -10,20 +11,28 @@ import type {
   ProjectSearchResult,
   ProjectSummary,
   ProjectVaultEntry,
+  ProviderBatchTestResult,
   ProviderTestResult,
   RecentProject,
   SkillFileSummary,
   TaskItem,
   TimelineSettings,
+  VolumeInfo,
   ViewKey,
 } from '../../types'
+import type { Locale, TranslationKey } from '../../i18n'
+
+type T = (locale: Locale, key: TranslationKey) => string
 
 export type WorkspaceProps = {
   activeView: ViewKey
   activeModule: ModuleKey
   activeModuleView: ModuleSubViewKey
+  locale: Locale
+  t: T
   focusMode: boolean
   project: ProjectSummary | null
+  isProjectReadOnly: boolean
   recentProjects: RecentProject[]
   form: CreateProjectInput
   busy: boolean
@@ -32,10 +41,24 @@ export type WorkspaceProps = {
   selectedChapterId: string
   chapterPath: string
   manuscript: string
+  manuscriptSelection: { start: number; end: number } | null
+  manuscriptRestoreSelection: { start: number; end: number } | null
+  knowledgeRestoreSelection: {
+    kind: 'confirmed-facts' | 'open-loops' | 'forbidden-rules'
+    start: number
+    end: number
+  } | null
+  recentParagraphReplacement: {
+    candidatePreview: string
+    manuscriptPreview: string
+  } | null
   manuscriptWordCount: number
   saveState: string
   frameworkPath: string
   frameworkContent: string
+  frameworkDraftContent: string
+  frameworkDraftPath: string
+  frameworkDraftSourceContent: string
   blueprintPath: string
   blueprint: string
   blueprintHistory: BlueprintHistorySummary[]
@@ -49,9 +72,17 @@ export type WorkspaceProps = {
   candidatePath: string
   candidateReviewPath: string
   candidateWarnings: string[]
+  candidateReviewIssues: CandidateReviewIssue[]
+  candidateSelection: { start: number; end: number } | null
+  candidateRestoreSelection: { start: number; end: number } | null
   candidateHistory: BlueprintHistorySummary[]
   selectedCandidateHistoryPath: string
   candidateHistoryPreview: string
+  candidateHistoryJumpSource: {
+    historyPath: string
+    confirmationPath: string
+    confirmationEntryId: string
+  } | null
   candidateGenerationRunning: boolean
   candidateGenerationStatus: string
   confirmedFacts: string
@@ -62,7 +93,10 @@ export type WorkspaceProps = {
   forbiddenRulesPath: string
   timelineEvents: string
   timelineEventsPath: string
+  timelineMilestones: string
+  timelineMilestonesPath: string
   timelineSettings: TimelineSettings
+  volumes: VolumeInfo[]
   markdownFiles: MarkdownFileSummary[]
   projectVaultEntries: ProjectVaultEntry[]
   projectHealth: ProjectHealthReport | null
@@ -71,13 +105,18 @@ export type WorkspaceProps = {
   skillFiles: SkillFileSummary[]
   selectedSkillName: string
   skillPreview: string
+  onChangeSkillPreview: (content: string) => void
   skillWarnings: string[]
   aiProvidersJson: string
   aiProvidersPath: string
   providerTestMessage: string
+  highlightedModelCallId: string
+  highlightedConfirmationPath: string
+  highlightedConfirmationEntryId: string
   lastExportedPath: string
   tasks: TaskItem[]
   onImportProject: () => void
+  onSelectView: (view: ViewKey) => void
   onUpdateForm: <Key extends keyof CreateProjectInput>(key: Key, value: CreateProjectInput[Key]) => void
   onChooseFolder: () => void
   onOpenProject: () => void
@@ -88,6 +127,7 @@ export type WorkspaceProps = {
   onSaveFrameworkFile: () => void
   onChangeFrameworkContent: (content: string) => void
   onGenerateFrameworkDraft: () => void
+  onImportNovelStructureFile: () => void
   onLoadMarkdownFile: (relativePath: string) => void
   onLoadBlueprintHistory: (relativePath: string) => void
   onLoadCandidateHistory: (relativePath: string) => void
@@ -96,6 +136,10 @@ export type WorkspaceProps = {
   onChangeForbiddenRules: (content: string) => void
   onChangeTimelineEvents: (content: string) => void
   onSaveTimelineEvents: () => void
+  onChangeTimelineMilestones: (content: string) => void
+  onSaveTimelineMilestones: () => void
+  onChangeVolumes: (volumes: VolumeInfo[]) => void
+  onSaveVolumes: (volumes?: VolumeInfo[]) => void
   onSaveKnowledgeFile: (kind: 'confirmed-facts' | 'open-loops' | 'forbidden-rules') => void
   onRepairProjectStructure: () => void
   onRevealProjectFolder: () => void
@@ -111,9 +155,12 @@ export type WorkspaceProps = {
   onSelectChapter: (chapterId: string) => void
   onChangeManuscript: (content: string) => void
   onSaveChapter: () => void
+  onImportChapterMarkdown: () => void
   onChangeBlueprint: (content: string) => void
   onSaveBlueprint: () => void
   onGenerateBlueprintDraft: () => void
+  onGenerateBlueprintFromManuscript: () => void
+  onImportBlueprintBundle: () => void
   onRegenerateAllBlueprints: () => void
   onRegenerateFollowingBlueprints: () => void
   onSaveAuthorInput: () => void
@@ -123,21 +170,35 @@ export type WorkspaceProps = {
   onGenerateCandidate: () => void
   onCancelCandidateGeneration: () => void
   onChangeCandidate: (content: string) => void
+  onChangeCandidateSelection: (start: number, end: number) => void
   onSaveCandidate: () => void
   onClearCandidate: () => void
   onAdoptCandidate: (mode?: 'replace' | 'append' | 'insert') => void
+  onAdoptCandidateText: (content: string, mode?: 'append' | 'insert') => void
+  onReplaceManuscriptParagraph: (candidateParagraph: string, manuscriptParagraph: string) => void
+  onUndoParagraphReplacement: () => void
+  onOpenKnowledgeHit: (kind: 'fact' | 'loop' | 'rule', text: string) => void
+  onLocateCandidateText: (content: string) => void
+  onLocateManuscriptText: (content: string) => void
   onChangeManuscriptSelection: (start: number, end: number) => void
   onRestoreCandidateHistory: () => void
+  onOpenCandidateHistoryVersion: (manifestPath: string, confirmationPath?: string, confirmationEntryId?: string) => void
   onChangeAiProvidersJson: (content: string) => void
-  onSaveAiProviders: () => void
+  onSaveAiProviders: () => Promise<boolean>
   onTestAiProvider: () => Promise<ProviderTestResult | null | void>
+  onTestAiProviders: () => Promise<ProviderBatchTestResult | null | void>
   onOpenModelProviders: () => void
+  onOpenModelCallRecord: (logEntryId: string) => void
+  onClearModelCallHighlight: () => void
+  onOpenConfirmationRecord: (confirmationPath: string, confirmationEntryId?: string) => void
+  onClearConfirmationHighlight: () => void
   onLoadSkillFile: (fileName: string) => void
   onImportSkillFile: () => void
   onSetSkillDisabled: (fileName: string, disabled: boolean) => void
   onSetTemporarySkill: (fileName: string, temporary: boolean) => void
   onExtractCharacterCards: () => void
-  onRescanFacts: () => void
+  onRescanFacts: (kind?: 'confirmed-facts' | 'open-loops' | 'forbidden-rules', authorInput?: string) => void
+  onImportSkillFolder: () => void
   onToggleFocusMode: () => void
   onExportProject: (format: 'markdown' | 'txt' | 'docx', scope?: 'all' | 'chapter' | 'selected', chapterIds?: string[]) => void
 }
@@ -153,18 +214,20 @@ export const MODULE_TITLES: Record<string, string> = {
 }
 
 export const VIEW_TITLES: Record<string, string> = {
-  'novel-settings': '小说设置',
-  'story-premise': '故事前提',
+  'continue-writing': '继续写',
+  'novel-settings': '小说结构',
+  'story-premise': '故事梗概',
   characters: '角色图谱',
   world: '世界观',
   'plot-outline': '情节大纲',
+  'important-scenes': '重要场景',
   timeline: '时间线与里程碑',
   'chapter-blueprint': '章节蓝图',
-  'draft-box': '候选稿',
+  'draft-box': '正文草稿',
   manuscript: '正文',
   facts: '事实库',
   skills: 'Skills',
   'ai-providers': 'AI Provider',
   exports: '导出',
-  'local-files': '本地 Markdown',
+  'local-files': '资料库',
 }

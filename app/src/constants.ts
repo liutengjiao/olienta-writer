@@ -7,7 +7,7 @@ export const defaultChapters: ChapterSummary[] = [
 ]
 
 export const defaultProjectForm: CreateProjectInput = {
-  name: '未命名作品',
+  name: '',
   root_path: '',
   language: 'zh-CN',
   chapter_count: 3,
@@ -17,9 +17,9 @@ export const defaultProjectForm: CreateProjectInput = {
 
 export const wutongboliSampleProject = {
   name: '无痛剥离',
-  root_path: 'D:\\windsurf\\olienta-projects\\wutongboli-sample-project',
+  root_path: 'sample://wutongboli',
   language: 'zh-CN',
-  chapter_count: 34,
+  chapter_count: 3,
   target_words_per_chapter: 10000,
   template: 'literary',
 }
@@ -28,6 +28,8 @@ export const templates = [
   { value: 'blank', label: '空白项目' },
   { value: 'literary', label: '严肃文学长篇' },
   { value: 'webnovel', label: '网文长篇' },
+  { value: 'literary-realism-classical-chapter', label: '现实主义章回体' },
+  { value: 'literary-scifi', label: '文学科幻' },
 ]
 
 export const defaultTasks: TaskItem[] = [

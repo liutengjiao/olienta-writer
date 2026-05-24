@@ -40,7 +40,7 @@ export function KnowledgePanel(props: WorkspaceProps) {
       <div className="knowledge-import-actions editor-card">
         <div>
           <h2>本地资料导入</h2>
-          <p className="empty-note">把 Markdown/TXT 资料导入项目文件夹，再把有用片段钉选进章节任务书。</p>
+          <p className="empty-note">把 Markdown/TXT 资料导入项目文件夹，再把有用片段钉选进本章写作要求。</p>
         </div>
         <div className="editor-actions">
           <button type="button" className="ghost-button" onClick={props.onImportReferenceFile}>导入文件</button>
@@ -60,29 +60,52 @@ export function KnowledgePanel(props: WorkspaceProps) {
 }
 
 export function KnowledgeFactsPanel(props: WorkspaceProps) {
+  const [generationInput, setGenerationInput] = useState('')
+
   return (
-    <section className="module-document-layout">
-      <MarkdownDocument
+    <section className="module-document-layout knowledge-facts-layout">
+      <section className="editor-card knowledge-ai-brief">
+        <div className="card-heading">
+          <div>
+            <h2>AI 生成要求</h2>
+            <p>这里写给 AI 的补充要求。下面三份文件会分别调用 AI，并写回各自绑定的 Markdown 文件。</p>
+          </div>
+        </div>
+        <textarea
+          value={generationInput}
+          onChange={(event) => setGenerationInput(event.target.value)}
+          placeholder="例如：只根据已保存正文提取；重点关注杨志远与欧阳的关系风险；不要新增正文没有发生的事实..."
+        />
+      </section>
+        <MarkdownDocument
         title="已确认事实"
         path={props.confirmedFactsPath}
         value={props.confirmedFacts}
-        onChange={props.onChangeConfirmedFacts}
-        onSave={() => props.onSaveKnowledgeFile('confirmed-facts')}
-        actions={<button type="button" className="ghost-button" onClick={props.onRescanFacts}>重扫正文</button>}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
+        hideReadOnlyBadge
+        restoreSelection={props.knowledgeRestoreSelection?.kind === 'confirmed-facts' ? props.knowledgeRestoreSelection : null}
+        actions={(
+          <>
+            <button type="button" className="ghost-button" onClick={() => props.onRescanFacts('confirmed-facts', generationInput)}>再次生成</button>
+          </>
+        )}
       />
       <MarkdownDocument
         title="未闭合伏笔"
         path={props.openLoopsPath}
         value={props.openLoops}
-        onChange={props.onChangeOpenLoops}
-        onSave={() => props.onSaveKnowledgeFile('open-loops')}
-      />
-      <MarkdownDocument
-        title="禁止违背"
-        path={props.forbiddenRulesPath}
-        value={props.forbiddenRules}
-        onChange={props.onChangeForbiddenRules}
-        onSave={() => props.onSaveKnowledgeFile('forbidden-rules')}
+        onChange={() => undefined}
+        onSave={() => undefined}
+        readOnly
+        hideReadOnlyBadge
+        restoreSelection={props.knowledgeRestoreSelection?.kind === 'open-loops' ? props.knowledgeRestoreSelection : null}
+        actions={(
+          <>
+            <button type="button" className="ghost-button" onClick={() => props.onRescanFacts('open-loops', generationInput)}>再次生成</button>
+          </>
+        )}
       />
     </section>
   )
@@ -104,6 +127,7 @@ export function CharactersPanel(props: WorkspaceProps) {
   )
   const selectedPath = editingOverviewSource ? props.frameworkPath : props.selectedMarkdownPath || current.path
   const selectedContent = editingOverviewSource ? props.frameworkContent : props.markdownPreview || ''
+  const completeness = characterDocumentCompleteness(selectedContent)
 
   return (
     <section className="character-workspace">
@@ -163,6 +187,21 @@ export function CharactersPanel(props: WorkspaceProps) {
         </aside>
 
         <div className="character-card-detail">
+          <div className="character-workflow-actions">
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('framework/03-characters.md')}>
+              角色图谱
+            </button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('characters/cards/INDEX.md')}>
+              角色卡索引
+            </button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('characters/relations.md')}>
+              关系图谱
+            </button>
+            <button type="button" className="ghost-button" onClick={() => props.onLoadMarkdownFile('characters/growth.md')}>
+              成长线
+            </button>
+            <span>完整度 {completeness.completed}/{completeness.total}</span>
+          </div>
           <MarkdownDocument
             title={selectedPath === current.path ? current.title : '角色文件'}
             path={selectedPath}
@@ -178,6 +217,23 @@ export function CharactersPanel(props: WorkspaceProps) {
       </section>
     </section>
   )
+}
+
+function characterDocumentCompleteness(content: string) {
+  const checkpoints = [
+    '身份',
+    '欲望',
+    '恐惧',
+    '边界',
+    '关系',
+    '冲突',
+    '章节追踪',
+    '下一次出场边界',
+  ]
+  const completed = checkpoints.filter((checkpoint) =>
+    content.includes(checkpoint) && !content.includes(`${checkpoint}：未提取`),
+  ).length
+  return { completed, total: checkpoints.length }
 }
 
 const SEARCH_SCOPES = [
@@ -255,7 +311,7 @@ function KnowledgeSearchPanel(props: WorkspaceProps) {
       <div className="card-heading">
         <div>
           <h2>本地全文检索</h2>
-          <p>检索本地项目文件，并把有用材料钉选进当前章节任务书。</p>
+          <p>按关键词、短语或多个词检索本地项目文件，并把有用材料钉选进当前章写作要求。</p>
         </div>
         <span className="status-pill">{status}</span>
       </div>
@@ -267,7 +323,7 @@ function KnowledgeSearchPanel(props: WorkspaceProps) {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void runSearch()
           }}
-          placeholder="检索项目文本文件"
+          placeholder="检索项目文本文件，如：股权 手术 欧阳"
         />
         <button type="button" className="primary-button" onClick={() => void runSearch()}>检索</button>
         <button type="button" className="ghost-button" onClick={() => void refreshPinnedContext()}>钉选材料</button>

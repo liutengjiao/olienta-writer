@@ -15,6 +15,10 @@ export type ModelCallEntry = {
   chapter: string
   input: string
   output: string
+  promptSummary: string
+  retryAttempts: number
+  retryReason: string
+  attemptDurationsMs: string
   durationMs: number | null
   promptTokens: number | null
   completionTokens: number | null
@@ -85,6 +89,21 @@ export type ModelCallProviderSummary = {
   latestMessage: string
 }
 
+export type ModelCallTaskSummary = {
+  task: string
+  callCount: number
+  failedCount: number
+  failureRate: number
+  averageDurationMs: number
+  totalTokens: number
+  estimatedCostUsd: number
+  pricedCallCount: number
+  providers: string[]
+  primaryProvider: string
+  latestStatus: string
+  latestMessage: string
+}
+
 export function summarizeModelCallHistory(content: string): ModelCallSummary {
   const entries = parseModelCallHistory(content)
 
@@ -151,6 +170,10 @@ export function filterModelCallEntries(
         entry.chapter,
         entry.input,
         entry.output,
+        entry.promptSummary,
+        String(entry.retryAttempts),
+        entry.retryReason,
+        entry.attemptDurationsMs,
         entry.message,
       ].join('\n').toLowerCase()
       if (!haystack.includes(query)) return false
@@ -338,6 +361,73 @@ export function summarizeModelCallProviders(
     )
 }
 
+export function summarizeModelCallTasks(
+  entries: ModelCallEntry[],
+  providers: ModelCallPricing[],
+): ModelCallTaskSummary[] {
+  const groups = new Map<string, {
+    entries: ModelCallEntry[]
+    durationTotal: number
+    durationCount: number
+    estimatedCostUsd: number
+    pricedCallCount: number
+    providerCounts: Map<string, number>
+  }>()
+
+  for (const entry of entries) {
+    const task = entry.task || '-'
+    const group = groups.get(task) ?? {
+      entries: [],
+      durationTotal: 0,
+      durationCount: 0,
+      estimatedCostUsd: 0,
+      pricedCallCount: 0,
+      providerCounts: new Map<string, number>(),
+    }
+    group.entries.push(entry)
+    if (entry.durationMs !== null && entry.durationMs > 0) {
+      group.durationTotal += entry.durationMs
+      group.durationCount += 1
+    }
+    const cost = estimateModelCallCost(entry, providers)
+    if (cost !== null) {
+      group.estimatedCostUsd += cost
+      group.pricedCallCount += 1
+    }
+    const provider = entry.provider || '-'
+    group.providerCounts.set(provider, (group.providerCounts.get(provider) ?? 0) + 1)
+    groups.set(task, group)
+  }
+
+  return Array.from(groups.entries())
+    .map(([task, group]) => {
+      const latest = group.entries[group.entries.length - 1]
+      const failedCount = group.entries.filter((entry) => entry.status === 'failed').length
+      const providersByCount = Array.from(group.providerCounts.entries())
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .map(([provider]) => provider)
+      return {
+        task,
+        callCount: group.entries.length,
+        failedCount,
+        failureRate: group.entries.length === 0 ? 0 : Math.round((failedCount / group.entries.length) * 100),
+        averageDurationMs: group.durationCount === 0 ? 0 : Math.round(group.durationTotal / group.durationCount),
+        totalTokens: group.entries.reduce((total, entry) => total + (entry.totalTokens ?? 0), 0),
+        estimatedCostUsd: group.estimatedCostUsd,
+        pricedCallCount: group.pricedCallCount,
+        providers: providersByCount,
+        primaryProvider: providersByCount[0] ?? '-',
+        latestStatus: latest?.status ?? 'unknown',
+        latestMessage: latest?.message ?? '-',
+      }
+    })
+    .sort((left, right) =>
+      right.callCount - left.callCount ||
+      right.failedCount - left.failedCount ||
+      left.task.localeCompare(right.task),
+    )
+}
+
 function parseModelCallEntry(entry: string, index: number): ModelCallEntry {
   const task = entry.match(/^##\s+(.+)$/m)?.[1]?.trim() ?? `call-${index + 1}`
   return {
@@ -349,6 +439,10 @@ function parseModelCallEntry(entry: string, index: number): ModelCallEntry {
     chapter: fieldValue(entry, 'chapter') || '-',
     input: fieldValue(entry, 'input') || '-',
     output: fieldValue(entry, 'output') || '-',
+    promptSummary: fieldValue(entry, 'promptSummary') || '-',
+    retryAttempts: optionalNumericField(entry, 'retryAttempts') ?? 0,
+    retryReason: fieldValue(entry, 'retryReason') || '-',
+    attemptDurationsMs: fieldValue(entry, 'attemptDurationsMs') || '-',
     durationMs: optionalNumericField(entry, 'durationMs'),
     promptTokens: optionalNumericField(entry, 'promptTokens'),
     completionTokens: optionalNumericField(entry, 'completionTokens'),

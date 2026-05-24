@@ -1,4 +1,4 @@
-import { defaultChapters } from './constants'
+import { defaultChapters, defaultProjectForm, wutongboliSampleProject } from './constants'
 import type { CreateProjectInput, ProjectSummary } from './types'
 
 export function previewProjectFromForm(form: CreateProjectInput): ProjectSummary {
@@ -24,4 +24,54 @@ export function makePreviewChapters(count: number) {
     const id = `${index + 1}`.padStart(3, '0')
     return existing ?? { id, title: `第${index + 1}章 未命名`, words: 0, state: '待规划' }
   })
+}
+
+export function isSampleProjectRoot(rootPath: string) {
+  return normalizeProjectPath(rootPath) === normalizeProjectPath(wutongboliSampleProject.root_path)
+}
+
+export function ensureTrailingBackslash(value: string) {
+  const trimmed = stripWindowsVerbatimPrefix(value.trim())
+  if (!trimmed) return ''
+  return trimmed.endsWith('\\') || trimmed.endsWith('/') ? trimmed : `${trimmed}\\`
+}
+
+export function normalizeSaveLocation(value: string) {
+  const trimmed = stripWindowsVerbatimPrefix(value.trim())
+  if (!trimmed) return ''
+  const normalized = trimmed.replace(/[\\/]+$/, '')
+  if (!defaultProjectForm.root_path.trim()) return trimmed
+  const defaultRoot = defaultProjectForm.root_path.replace(/[\\/]+$/, '')
+  const normalizedLower = normalized.replaceAll('\\', '/').toLowerCase()
+  const defaultLower = defaultRoot.replaceAll('\\', '/').toLowerCase()
+
+  if (normalizedLower.startsWith(`${defaultLower}/`)) {
+    const relative = normalized.slice(defaultRoot.length).replace(/^[\\/]+/, '')
+    if (relative && !relative.includes('\\') && !relative.includes('/')) {
+      return defaultProjectForm.root_path
+    }
+  }
+  return trimmed
+}
+
+export function stripWindowsVerbatimPrefix(value: string) {
+  return value.replace(/^\\\\\?\\/, '')
+}
+
+export function normalizePathKey(value: string) {
+  return stripWindowsVerbatimPrefix(value.trim()).replace(/[\\/]+$/, '').replaceAll('\\', '/').toLowerCase()
+}
+
+export function sanitizeProjectFolderName(value: string) {
+  return value
+    .trim()
+    .split('')
+    .map((char) => (char.charCodeAt(0) < 32 || /[<>:"/\\|?*]/.test(char) ? '-' : char))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+}
+
+function normalizeProjectPath(value: string) {
+  return normalizePathKey(value)
 }

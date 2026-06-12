@@ -35,8 +35,8 @@ For writers, use the installer from GitHub Releases. You do not need Node.js, Ru
 
 Windows release files:
 
-- `Olienta Writer_0.1.0_x64-setup.exe`
-- `Olienta Writer_0.1.0_x64_en-US.msi`
+- `Olienta Writer_0.1.2_x64-setup.exe`
+- `Olienta Writer_0.1.2_x64_en-US.msi`
 
 ## First Run
 

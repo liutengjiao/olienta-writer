@@ -100,7 +100,8 @@ type AgentContext = {
 
 export function AgentPanel(props: Props) {
   const context = getAgentContext(props.activeModule, props.activeModuleView, props.activeView)
-  const contextKey = agentContextKey(context, props)
+  const effectiveActiveView = agentActiveView(context, props)
+  const contextKey = agentContextKey(context, props, effectiveActiveView)
   const [chatInputs, setChatInputs] = useState<Record<string, string>>({})
   const [chatMessagesByContext, setChatMessagesByContext] = useState<Record<string, AiChatMessage[]>>(() => loadLocalAgentChatHistory(props.projectRoot))
   const [chatEventsByContext, setChatEventsByContext] = useState<Record<string, string[]>>({})
@@ -272,7 +273,7 @@ export function AgentPanel(props: Props) {
         rootPath: props.projectRoot,
         chapterId: props.selectedChapterId,
         contextKind: context.kind,
-        activeView: props.activeView,
+        activeView: effectiveActiveView,
         requestId,
         clientContext: buildClientContextItems(),
         messages: nextMessages,
@@ -282,7 +283,7 @@ export function AgentPanel(props: Props) {
       if (result.contextSnapshotPath) pushChatEvent(`上下文快照：${result.contextSnapshotPath}`)
       setChatStatusByContext((current) => ({ ...current, [requestContextKey]: result.usedRemoteModel ? `已由 ${result.provider} 回复` : result.provider }))
       pushChatEvent(result.usedRemoteModel ? `收到 ${result.provider} 回复` : '返回本地诊断')
-      if (result.usedRemoteModel && !isFailureMessage(result.content)) {
+      if (result.content.trim()) {
         setChatMessagesByContext((current) => ({ ...current, [requestContextKey]: [...nextMessages, { role: 'assistant', content: `${result.content}${warnings}` }] }))
       }
     } catch (error) {
@@ -640,6 +641,7 @@ function saveLocalAgentChatHistory(projectRoot: string, messagesByContext: Recor
 
 function getAgentContext(module: ModuleKey, moduleView: ModuleSubViewKey, view: ViewKey): AgentContext {
   if (view === 'novel-settings') return { kind: 'settings', title: '小说结构助手', target: '小说结构', path: 'framework/01-setting.md', policy: '框架草稿先保存为草稿，作者确认后才覆盖正稿。', contextItems: ['作者输入', '故事梗概', '启用 Skill', '事实库'] }
+  if (module === 'characters' && moduleView === 'characters-overview') return { kind: 'framework', title: '故事框架助手', target: '角色图谱', path: 'framework/03-characters.md', policy: '框架草稿不会直接覆盖正稿。', contextItems: ['当前框架文件', '其它故事框架文件', '启用 Skill'] }
   if (['story-premise', 'characters', 'world', 'plot-outline', 'important-scenes', 'timeline'].includes(view)) return { kind: 'framework', title: '故事框架助手', target: frameworkTarget(view), path: 'framework/*.md', policy: '框架草稿不会直接覆盖正稿。', contextItems: ['当前框架文件', '其它故事框架文件', '启用 Skill'] }
   if (view === 'chapter-blueprint') return { kind: 'blueprint', title: '章节蓝图助手', target: '当前章节蓝图', path: 'blueprints/chapters/*.md', policy: '蓝图保存会影响后续章节。', contextItems: ['当前章节蓝图', '故事框架', '事实库', '启用 Skill'] }
   if (view === 'draft-box') return { kind: 'draft', title: 'AI助手', target: '当前章节候选稿', path: 'manuscript/candidates/*.md', policy: '候选稿必须由作者明确采用。', contextItems: ['当章蓝图', '前文正文', '事实库', '启用 Skill'] }
@@ -661,14 +663,19 @@ function frameworkTarget(view: ViewKey) {
   return targets[view] ?? '故事框架'
 }
 
-function agentContextKey(context: AgentContext, props: Props) {
+function agentActiveView(context: AgentContext, props: Props): ViewKey {
+  if (context.kind === 'framework' && context.path === 'framework/03-characters.md') return 'characters'
+  return props.activeView
+}
+
+function agentContextKey(context: AgentContext, props: Props, activeView: ViewKey) {
   if (context.kind === 'framework' || context.kind === 'settings') {
-    return `${context.kind}:${props.activeView}:${props.selectedFrameworkFile}`
+    return `${context.kind}:${activeView}:${props.selectedFrameworkFile}`
   }
   if (context.kind === 'blueprint' || context.kind === 'chapter' || context.kind === 'draft') {
-    return `${context.kind}:${props.activeView}:${props.selectedChapterId}`
+    return `${context.kind}:${activeView}:${props.selectedChapterId}`
   }
-  return `${context.kind}:${props.activeModule}:${props.activeModuleView}:${props.activeView}`
+  return `${context.kind}:${props.activeModule}:${props.activeModuleView}:${activeView}`
 }
 
 function buildChapterLinks(chapters: ChapterSummary[], selectedChapterId: string) {

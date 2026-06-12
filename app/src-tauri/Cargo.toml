@@ -1,6 +1,6 @@
 [package]
 name = "olienta"
-version = "0.1.0"
+version = "0.1.2"
 description = "Local-first AI assisted writing desktop app"
 authors = ["Olienta"]
 edition = "2021"
